@@ -65,9 +65,9 @@ the same verified artifact. A bad app or changed DMG requires a new version/buil
 
 ## Pipeline order and failure handling
 
-The macOS job validates configuration, tests, imports the pinned release identity
-into an isolated temporary keychain, and builds/signs the app and all updater components. It
-verifies bundle metadata and arm64 executables, and packages an APFS DMG containing
+The macOS job validates configuration and imports the pinned release identity
+into an isolated temporary keychain. A native signing preflight runs before tests
+and compilation. It builds/signs the app and updater components, verifies bundle metadata and arm64 executables, and packages an APFS DMG containing
 the app, Applications shortcut, LICENSE and THIRD_PARTY_NOTICES.md. It verifies the
 previous feed signature and increasing build, then signs and verifies the new archive and single-entry feed.
 The internal artifact includes SHA-256 hashes and the previous feed hash; it is
@@ -170,7 +170,7 @@ The encrypted identity and password also have an owner-only local backup outside
 source. Never print them, commit them or generate a replacement during a routine
 build. A new Mac can publish through the configured CI without copying credentials.
 
-Both the build and packaging gate verify the exact embedded certificate and the
+Both the release build and packaging gate verify the exact embedded certificate and the
 certificate-bound designated requirement for Awake and all Sparkle executables.
 An absent secret, changed public certificate, wrong component signer, ad hoc
 identity or identifier-only requirement stops publication. The finished DMG is
