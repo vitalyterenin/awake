@@ -6,6 +6,29 @@ import ApplicationServices
 #endif
 
 @MainActor
+private final class MenuProbe: NSObject {
+    let menu: NSMenu
+    var inspected = false
+    var failure: String?
+    init(menu: NSMenu) { self.menu = menu }
+    @objc func inspect() {
+        inspected = true
+        let frame = menu.accessibilityFrame()
+        if frame.isEmpty || frame.height + 1 < menu.size.height {
+            failure = "Menu is clipped: \(frame), required \(menu.size)"
+        }
+        for row in menu.items where !row.isSeparatorItem && !row.isHidden {
+            let rect = row.accessibilityFrame()
+            if rect.isEmpty || !frame.insetBy(dx: -1, dy: -1).contains(rect) {
+                failure = "Menu row is not fully visible: \(row.title)"
+            }
+        }
+        print("Verified visible menu: \(menu.items.count) rows, frame \(frame)")
+        menu.cancelTracking()
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let awake = AwakeController()
     private let updates = UpdateController()
@@ -54,8 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if CommandLine.arguments.contains("--smoke-test") {
             guard menu.items.last?.title == "Quit Awake", menu.items.count >= 10,
                   statusItem.button?.image != nil else { exit(1) }
-            print("Awake menu smoke test passed; no synthetic movement was requested.")
-            NSApp.terminate(nil)
+            DispatchQueue.main.async { self.verifyVisibleMenus() }
+            return
+        }
+        if CommandLine.arguments.contains("--preview-menu") {
+            DispatchQueue.main.async { self.statusItem.button?.performClick(nil) }
             return
         }
         awake.start()
@@ -100,6 +126,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) { refreshMenu() }
+
+    private func verifyVisibleMenus() {
+        guard let button = statusItem.button, let window = button.window else { exit(1) }
+        let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        for visible in [menu, checkUpdates.menu!] {
+            let probe = MenuProbe(menu: visible)
+            let timer = Timer(timeInterval: 0.25, target: probe,
+                              selector: #selector(MenuProbe.inspect), userInfo: nil, repeats: false)
+            RunLoop.main.add(timer, forMode: .common)
+            visible.popUp(positioning: nil, at: NSPoint(x: anchor.minX, y: anchor.minY), in: nil)
+            timer.invalidate()
+            if !probe.inspected || probe.failure != nil {
+                print(probe.failure ?? "Menu closed before layout inspection")
+                exit(1)
+            }
+        }
+        print("Awake menu smoke test passed without monitoring or synthetic movement.")
+        NSApp.terminate(nil)
+    }
     func applicationWillTerminate(_ notification: Notification) { awake.stop() }
     @objc private func toggleAwake() { awake.setEnabled(!awake.enabled) }
     @objc private func allowAccessibility() { awake.requestPermission() }

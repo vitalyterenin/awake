@@ -6,21 +6,6 @@ mouse, scroll, click or type and movement stops immediately.
 
 **Apple Silicon only · macOS 13 or later**
 
-## Use
-
-Open Awake and allow it in **System Settings → Privacy & Security → Accessibility**.
-The sun icon in the menu bar has one behavior switch: **Keep Mac awake**.
-The idle delay is five minutes; the circle has a six-point radius and takes
-24 seconds per turn. Motion stays on the current display, including at its edges.
-Awake does not click, drag or type. It never records or transmits your input.
-
-While enabled with permission granted, a macOS power assertion prevents idle
-display and system sleep, including during the five-minute countdown. Choosing
-Sleep, closing the lid or a low battery can still put the Mac to sleep. Awake
-pauses during inactive/locked sessions and starts a fresh countdown on return.
-Turning it off or quitting releases the assertion and restores normal idle sleep.
-It does not change your sleep settings or start at login.
-
 ## Install and update
 
 Download **[Awake.dmg](https://teren.in/apps/Awake.dmg)**, drag Awake to Applications,
@@ -28,15 +13,54 @@ eject the image, then open the installed app. The initial build is ad hoc signed
 and is not notarized. If macOS blocks its first launch, approve the installed app
 with **System Settings → Privacy & Security → Open Anyway**.
 
-Signed Sparkle updates use a permanent feed and download URL. Scheduled checks and
-automatic installation are enabled by default. The **Updates** submenu offers a
-manual check and controls for both update preferences.
+Allow Awake in **System Settings → Privacy & Security → Accessibility**. Until
+permission is granted, Awake shows a permission reminder and does not prevent sleep
+or move the cursor. **Allow Accessibility…** in its menu opens the relevant settings.
 
-There is no telemetry. Network requests are limited to update checks/downloads.
+Signed Sparkle updates use a permanent feed and download URL. Scheduled checks and
+automatic installation are enabled by default, with checks every four hours while
+Awake runs. The **Updates** submenu offers **Check for Updates…**, **Check
+automatically**, and **Install automatically**. Installation may wait for quit or
+permission. These preferences persist between launches.
+
+To remove Awake, choose **Quit Awake** and move the app from Applications to Trash.
+
+## Use
+
+The sun icon in the menu bar has one behavior switch: **Keep Mac awake**. It defaults
+to on and remembers your choice between launches. The menu shows the current state
+and the countdown until cursor movement.
+
+The idle delay is five minutes; the nominal circle radius is six points and each
+turn takes 24 seconds. Near screen edges the path is adjusted and clipped to stay
+on the current display, without an initial jump. Move, scroll, click or type to
+stop movement and restart the countdown. Awake does not click, drag or type.
+
+While enabled with Accessibility permission and working input monitoring, a macOS
+power assertion prevents idle display and system sleep, including during the
+five-minute countdown. Choosing Sleep, closing the lid or a low battery can still
+put the Mac to sleep. Awake pauses during inactive/locked sessions and starts a
+fresh countdown on return. It does not disable macOS screen locking.
+
+Turning it off or quitting releases the assertion and restores normal idle sleep.
+Awake does not change your sleep settings or start at login. If permission is
+revoked or monitoring fails, it pauses and shows the problem in the menu. Restore
+Accessibility permission or reopen Awake to retry.
+
+## Privacy and help
+
+There is no telemetry. Awake never records input, reads typed characters, or
+transmits mouse/keyboard activity. Input events are observed only to reset the
+in-memory countdown and are returned unchanged. Network requests are limited to
+Sparkle update checks/downloads from `teren.in`; system profiling is disabled.
+
+Maintained by [Vitaly Terenin](https://teren.in/). Source access holders can report
+problems in the [private repository's issues](https://github.com/vitalyterenin/awake/issues).
+The source repository is private; no open-source license has been assigned.
 
 ## Build
 
-On an Apple Silicon Mac with Swift 6+ and Command Line Tools:
+From the repository root on an Apple Silicon Mac with Swift 6+ and Command Line Tools:
 
 ```sh
 bash scripts/test.sh

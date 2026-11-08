@@ -14,7 +14,7 @@
       "NotPrincipal": {
         "CanonicalUser": [
           "ajeu7547nhflc1cc4qfo",
-          "AWAKE_PUBLISHER_SERVICE_ACCOUNT_ID"
+          "ajedgk1fm1eiv8ndihom"
         ]
       },
       "Action": "*",
@@ -42,7 +42,7 @@
       "Sid": "AwakeTwoReleaseObjectsOnly",
       "Effect": "Allow",
       "Principal": {
-        "CanonicalUser": "AWAKE_PUBLISHER_SERVICE_ACCOUNT_ID"
+        "CanonicalUser": "ajedgk1fm1eiv8ndihom"
       },
       "Action": [
         "s3:GetObject",

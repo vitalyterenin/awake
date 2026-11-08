@@ -29,7 +29,8 @@ Keep the private identity in Keychain and encrypted repository secrets; commit
 only the public key in `release.json`. GitHub Actions needs `SPARKLE_PRIVATE_KEY`,
 `YC_ACCESS_KEY_ID`, `YC_SECRET_ACCESS_KEY`. The storage publisher is a dedicated
 service account with bucket-scoped uploader access and an exact-object bucket
-policy. Preserve existing policy statements/public reads; exclude this account
+policy. Its name is `awake-release`, ID `ajedgk1fm1eiv8ndihom`.
+Preserve existing policy statements/public reads; exclude this account
 from any pre-existing permissive `NotPrincipal` statement. The applied policy is
 recorded in `deployment/teren-in-policy.json`. A committed policy alone does not
 change cloud access.
@@ -38,10 +39,13 @@ change cloud access.
 
 1. Update semantic version and increase the positive build in `release.json`.
 2. Run `bash scripts/test.sh` and `bash scripts/build-app.sh`.
-3. Push a branch, wait for PR checks, merge the checked revision into main.
-4. Tag that exact commit `v<version>` and push the tag.
-5. Wait for both **build** and **publish** jobs in **Release Awake**.
-6. Verify the publicly served feed/DMG, both Ed25519 signatures, length,
+3. Review all maintained app documentation against the complete current app using
+   the shared skill's mandatory documentation gate. Correct inconsistencies and
+   record review scope and evidence in the release PR before tagging.
+4. Push a branch, wait for PR checks, merge the checked revision into main.
+5. Tag that exact commit `v<version>` and push the tag.
+6. Wait for both **build** and **publish** jobs in **Release Awake**.
+7. Verify the publicly served feed/DMG, both Ed25519 signatures, length,
    arm64 requirement and version/build. A source commit is not a release.
 
 PR checks have no secrets. Ordinary main pushes do not publish. The matching tag
@@ -60,11 +64,23 @@ Build/cache paths are outside Documents to avoid file-provider metadata breaking
 signatures. Overrides: `AWAKE_BUILD_DIR`, `AWAKE_OUTPUT_DIR`, `AWAKE_TOOLS_DIR`,
 `AWAKE_SIGN_IDENTITY` (default `-`, ad hoc).
 
+The local test script runs Swift Testing (including with Command Line Tools that
+lack XCTest). CI always runs the Python publication tests as well. To run these
+locally without changing system Python:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install 'boto3==1.42.97'
+.venv/bin/python -m unittest discover -s Tests -p 'test_*.py'
+```
+
 ## Runtime checks
 
 The built app accepts `--diagnostics` without starting the UI, input tap or motion.
-`--smoke-test` builds the actual menu and exits without asking for permission or
-starting monitoring. Never use live cursor movement tests without the user
+`--smoke-test` opens both native menus, verifies that every visible row fits their
+rendered frames, and exits without asking for permission or starting monitoring.
+`--preview-menu` opens the menu for manual visual inspection without monitoring.
+Never use live cursor movement tests without the user
 granting Accessibility to the installed app. Secure Input is handled using only
 key-event ages; no key codes or characters are read. Session lock detection also
 consults the optional WindowServer lock flag and otherwise uses workspace session
