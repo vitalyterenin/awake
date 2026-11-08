@@ -1,16 +1,16 @@
 # Awake
 
-A small macOS menu bar app that keeps your Mac awake. After one or five minutes
-without mouse or keyboard activity, the cursor slowly moves in a small circle. Move the
-mouse, scroll, click or type and movement stops immediately.
+A macOS menu bar app that prevents idle sleep. After one or five minutes without
+mouse or keyboard activity, the cursor slowly moves in a small circle. Move the
+mouse, scroll, click or type to stop the motion.
 
 **Apple Silicon only · macOS 13 or later**
 
 ## Install and update
 
 Download **[Awake.dmg](https://teren.in/apps/Awake.dmg)**, drag Awake to Applications,
-eject the image, then open the installed app. The initial build is ad hoc signed
-and is not notarized. If macOS blocks its first launch, approve the installed app
+eject the image, then open the installed app. Current builds are ad hoc signed
+and not notarized. If macOS blocks its first launch, approve the installed app
 with **System Settings → Privacy & Security → Open Anyway**.
 
 Allow Awake in **System Settings → Privacy & Security → Accessibility**. Until

@@ -1,6 +1,8 @@
 # Project conventions
 
 Write interface text, documentation and comments in English.
+Write GitHub descriptions, commits, PRs and release notes in English as well.
+Describe functions, requirements and usage concisely, without advertising or slogans.
 Awake supports Apple Silicon (arm64) only, macOS 13 or later.
 Keep one on/off switch and a motion delay choice of 1 or 5 minutes (default 5).
 Circle radius and speed are fixed. Persist the chosen delay and reset its countdown
