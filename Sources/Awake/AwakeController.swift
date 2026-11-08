@@ -300,7 +300,7 @@ final class AwakeController {
         else {
             restoreBrightness()
             let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))
-            message = String(format: "Awake · motion in %d:%02d", remaining / 60, remaining % 60)
+            message = String(format: "Motion in %d:%02d", remaining / 60, remaining % 60)
         }
     }
 
