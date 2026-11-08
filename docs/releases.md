@@ -161,8 +161,8 @@ versions; test an update from an ad hoc release before publishing the transition
 
 The built app accepts `--diagnostics` without starting the UI, input tap or motion.
 `--smoke-test` opens the main menu, motion-delay submenu and Updates submenu,
-verifies visible row geometry, and checks all setup states in light and dark
-appearances. It exits without requesting permission, starting monitoring, changing
+verifies visible row geometry, and checks all setup states and the drag helper
+in light and dark appearances. It exits without requesting permission, starting monitoring, changing
 brightness or writing runtime preferences.
 `--preview-menu` opens the menu for manual visual inspection without monitoring.
 `--status` queries the already running app over a read-only local notification
@@ -193,6 +193,16 @@ warning. Granting access closes an open warning window automatically. Reopening
 an already ready app does not create a success window. The **Permissions…** menu
 item can show readiness explicitly. An input-tap failure has its own paused state;
 **Still Blocked?** expands recovery instructions in the same window.
+**Open System Settings…** hides the setup window and opens a standard floating
+window that first asks the user to turn on Awake in the list. **Not Listed?**
+reveals a native file drag source for the running app bundle; an existing disabled
+entry does not need to be dragged again. Dropping the icon adds that exact copy;
+**Show in Finder** reveals it. The panel follows the Settings sidebar, floats only
+while Settings or Awake is active and stops after permission is granted or its
+close button is used. Window positioning reads only
+public bounds metadata, without screen capture or another permission request.
+Verify a real drag into Settings from an installed Applications copy when changing
+this flow; a layout test cannot establish that Settings accepts the dropped file.
 
 `--smoke-test` presents each actual window state in light/dark appearances, invokes
 its real dismiss button and asserts that the window is no longer visible. It also

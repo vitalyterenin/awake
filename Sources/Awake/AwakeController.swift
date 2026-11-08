@@ -126,12 +126,10 @@ final class AwakeController {
         tick()
     }
 
-    func requestPermission() {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
-            NSWorkspace.shared.open(url)
-        }
+    @discardableResult
+    func requestPermission() -> Bool {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return false }
+        return NSWorkspace.shared.open(url)
     }
 
     func stop() {

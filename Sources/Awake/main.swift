@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var dimRow: NSMenuItem!
     private var batteryRow: NSMenuItem!
     private var setup: PermissionSetupWindow?
+    private let permissionDrag = PermissionDragPanel()
     private var runtimeStarted = false
     private var lastControlState: CursorControlState?
     private var previewControlState: CursorControlState?
@@ -115,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastControlState = awake.cursorControlState
         runtimeStatus.start { [weak self] in
             guard let self else { return [:] }
-            return self.awake.diagnostics.merging(["setupVisible": self.setup?.isVisible == true]) { _, new in new }
+            return self.awake.diagnostics.merging(self.permissionDrag.diagnostics) { _, new in new }.merging(["setupVisible": self.setup?.isVisible == true,
+                "permissionDragVisible": self.permissionDrag.isVisible]) { _, new in new }
         }
         let firstLaunch = !UserDefaults.standard.bool(forKey: "didWelcome")
         if firstLaunch || awake.cursorControlState != .ready {
@@ -162,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.toolTip = "Awake — \(blocked ? problem : awake.message)"
         statusItem.button?.setAccessibilityLabel("Awake — \(blocked ? problem : awake.message)")
         setup?.update(controlState)
+        if controlState == .ready { permissionDrag.stop() }
         if runtimeStarted, lastControlState != controlState {
             lastControlState = controlState
             if blocked { showSetup() }
@@ -192,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let setup = setupWindow()
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            guard permissionDrag.verifyPresentation(appearance: appearance) else { exit(1) }
             for state in [CursorControlState.permissionRequired, .monitoringUnavailable, .ready] {
                 guard setup.verifyPresentation(state, appearance: appearance) else { exit(1) }
             }
@@ -201,8 +205,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         print("Awake menu and setup smoke test passed without monitoring or synthetic movement.")
         NSApp.terminate(nil)
     }
-    func applicationWillTerminate(_ notification: Notification) { if runtimeStarted { awake.stop() } }
+    func applicationWillTerminate(_ notification: Notification) { permissionDrag.stop(); if runtimeStarted { awake.stop() } }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if permissionDrag.isAccompanyingSettings { return false }
         if awake.cursorControlState != .ready { showSetup() }
         return true
     }
@@ -212,7 +217,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func setupWindow() -> PermissionSetupWindow {
         if let setup { return setup }
         let setup = PermissionSetupWindow()
-        setup.openSettings = { [weak self] in self?.awake.requestPermission() }
+        setup.openSettings = { [weak self] in
+            guard let self else { return }
+            if self.awake.requestPermission() {
+                self.setup?.window?.orderOut(nil)
+                self.permissionDrag.accompanySettings()
+            }
+        }
         setup.checkAgain = { [weak self] in
             guard let self else { return }
             self.awake.recheckCursorControl()
@@ -222,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return setup
     }
     @objc private func showSetup() {
+        permissionDrag.stop()
         let setup = setupWindow()
         setup.update(previewControlState ?? awake.cursorControlState)
         setup.present()
