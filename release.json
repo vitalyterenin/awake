@@ -1,8 +1,13 @@
 {
-  "version": "0.2.0",
-  "build": "3",
+  "version": "0.2.1",
+  "build": "4",
   "id": "awake",
-  "feedURL": "https://teren.in/apps/feeds/awake.xml",
-  "downloadURL": "https://teren.in/apps/Awake.dmg",
-  "publicEDKey": "t3cMZEYumH7YinrOKAQg9Za9NXRqVgsgH5DR28Cm7qM="
+  "feedURL": "https://vitalyterenin.github.io/awake/appcast.xml",
+  "downloadURL": "https://github.com/vitalyterenin/awake/releases/latest/download/Awake.dmg",
+  "publicEDKey": "t3cMZEYumH7YinrOKAQg9Za9NXRqVgsgH5DR28Cm7qM=",
+  "githubRepository": "vitalyterenin/awake",
+  "name": "Awake",
+  "legacyFeedURLs": [
+    "https://teren.in/apps/feeds/awake.xml"
+  ]
 }

@@ -8,7 +8,4 @@ if [[ -f "$testing_plugin" ]]; then
     test_args+=(-Xswiftc -load-plugin-library -Xswiftc "$testing_plugin")
 fi
 swift test "${test_args[@]}"
-# Optional publication dependencies live in the CI/local venv, never system Python.
-if python3 -c 'import boto3' 2>/dev/null; then
-    python3 -m unittest discover -s Tests -p 'test_*.py'
-fi
+python3 -m unittest discover -s Tests -p 'test_*.py'
