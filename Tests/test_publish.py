@@ -1,12 +1,16 @@
 import copy
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
+import socket
+import ssl
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import publish
@@ -35,6 +39,18 @@ class Client:
     @property
     def mutations(self):
         return [c for c in self.calls if c[0] == 'upload' or c[1] != 'GET']
+
+
+class Clock:
+    def __init__(self):
+        self.now = 0
+        self.sleeps = []
+
+    def __call__(self): return self.now
+
+    def sleep(self, seconds):
+        self.sleeps.append(seconds)
+        self.now += seconds
 
 
 class PublishTests(unittest.TestCase):
@@ -132,6 +148,103 @@ class PublishTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'did not converge'):
             publish.verify(self.root, self.client, self.fetch, attempts=1)
         self.assertFalse(self.client.mutations)
+
+    def verification_fixture(self):
+        self.client.latest = {'tag_name': 'v' + self.data['version']}
+        self.client.releases = [{'tag_name': 'v0.0.1', 'draft': False,
+                                 'assets': [{'id': 1, 'name': publish.ARCHIVE_NAME}]}]
+        return Clock()
+
+    def current_bytes(self, url):
+        return self.feed if url == self.data['feedURL'] else self.archive
+
+    def test_transient_download_errors_retry_before_cleanup(self):
+        errors = [URLError(ConnectionResetError()), TimeoutError(),
+                  http.client.IncompleteRead(b'partial'),
+                  URLError(socket.gaierror(socket.EAI_AGAIN, 'temporary DNS failure')),
+                  HTTPError('url', 408, 'timeout', {}, None),
+                  HTTPError('url', 429, 'throttled', {}, None),
+                  HTTPError('url', 500, 'server error', {}, None),
+                  HTTPError('url', 502, 'bad gateway', {}, None),
+                  HTTPError('url', 503, 'unavailable', {}, None),
+                  HTTPError('url', 504, 'gateway timeout', {}, None)]
+        for error in errors:
+            with self.subTest(error=error):
+                clock = self.verification_fixture()
+                self.client.calls.clear()
+                reads = []
+                def fetch(url):
+                    self.assertFalse(self.client.mutations)
+                    reads.append(url)
+                    if len(reads) == 2: raise error
+                    return self.current_bytes(url)
+                publish.verify(self.root, self.client, fetch, attempts=3,
+                               sleep=clock.sleep, clock=clock)
+                self.assertEqual(len(reads), 4)
+                self.assertEqual(clock.sleeps, [5])
+                self.assertEqual(self.client.mutations, [('/releases/assets/1', 'DELETE', None)])
+
+    def test_persistent_transient_errors_exhaust_attempts_without_cleanup(self):
+        clock = self.verification_fixture()
+        with patch.object(publish, 'public_bytes', side_effect=URLError(ConnectionResetError())) as fetch:
+            with self.assertRaisesRegex(ValueError, 'did not converge'):
+                publish.verify(self.root, self.client, attempts=3, sleep=clock.sleep, clock=clock)
+            self.assertEqual(fetch.call_count, 3)
+        self.assertEqual(clock.sleeps, [5, 5])
+        self.assertFalse(self.client.calls)
+
+    def test_permanent_errors_fail_immediately_without_cleanup(self):
+        errors = [HTTPError('url', 403, 'forbidden', {}, None),
+                  URLError(ssl.SSLCertVerificationError('invalid certificate')),
+                  ValueError('malformed response')]
+        for error in errors:
+            with self.subTest(error=error):
+                clock = self.verification_fixture()
+                with patch.object(publish, 'public_bytes', side_effect=error) as fetch:
+                    with self.assertRaises(type(error)):
+                        publish.verify(self.root, self.client, sleep=clock.sleep, clock=clock)
+                    self.assertEqual(fetch.call_count, 1)
+                self.assertFalse(clock.sleeps)
+                self.assertFalse(self.client.calls)
+
+    def test_deadline_limits_sleep_and_prevents_new_requests(self):
+        clock = self.verification_fixture()
+        with patch.object(publish, 'public_bytes', return_value=None) as fetch:
+            with self.assertRaisesRegex(ValueError, 'did not converge'):
+                publish.verify(self.root, self.client, timeout=7, sleep=clock.sleep, clock=clock)
+            self.assertEqual(fetch.call_count, 2)
+            self.assertEqual([call.kwargs['timeout'] for call in fetch.call_args_list], [7, 2])
+        self.assertEqual(clock.sleeps, [5, 2])
+        self.assertFalse(self.client.calls)
+
+    def test_late_matching_response_cannot_authorize_cleanup(self):
+        clock = self.verification_fixture()
+        def fetch(url):
+            clock.now += 4
+            return self.current_bytes(url)
+        with self.assertRaisesRegex(ValueError, 'did not converge'):
+            publish.verify(self.root, self.client, fetch, timeout=7, sleep=clock.sleep, clock=clock)
+        self.assertEqual(clock.now, 8)
+        self.assertFalse(clock.sleeps)
+        self.assertFalse(self.client.calls)
+
+    def test_byte_mismatch_can_converge_but_changed_latest_prevents_cleanup(self):
+        clock = self.verification_fixture()
+        self.client.latest = {'tag_name': 'v999.0.0'}
+        reads = []
+        def fetch(url):
+            reads.append(url)
+            return b'old feed' if len(reads) == 1 else self.current_bytes(url)
+        with self.assertRaisesRegex(ValueError, 'Latest release changed'):
+            publish.verify(self.root, self.client, fetch, sleep=clock.sleep, clock=clock)
+        self.assertEqual(clock.sleeps, [5])
+        self.assertFalse(self.client.mutations)
+
+    def test_verification_requires_positive_attempt_and_time_budgets(self):
+        for kwargs in [{'attempts': 0}, {'timeout': 0}, {'timeout': float('nan')}]:
+            with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                publish.verify(self.root, self.client, self.current_bytes, **kwargs)
+        self.assertFalse(self.client.calls)
 
     def test_cleanup_preserves_current_drafts_tags_and_unrelated_assets(self):
         self.client.latest = {'tag_name': 'v' + self.data['version']}

@@ -4,12 +4,23 @@ import AwakeCore
 
 @MainActor
 final class PowerSourceMonitor {
-    var didChange: (() -> Void)?
+    var didChange: (@MainActor () -> Void)?
     private var source: CFRunLoopSource?
+    private let copySnapshot: () -> Unmanaged<CFTypeRef>?
+    private let sourceType: (CFTypeRef) -> String?
+
+    init(copySnapshot: @escaping () -> Unmanaged<CFTypeRef>? = { IOPSCopyPowerSourcesInfo() },
+         sourceType: @escaping (CFTypeRef) -> String? = {
+             IOPSGetProvidingPowerSourceType($0)?.takeUnretainedValue() as String?
+         }) {
+        self.copySnapshot = copySnapshot
+        self.sourceType = sourceType
+    }
 
     var current: PowerSupply {
-        let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
-        guard let type = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String? else { return .unknown }
+        guard let snapshot = copySnapshot() else { return .unknown }
+        let info = snapshot.takeRetainedValue()
+        guard let type = sourceType(info) else { return .unknown }
         switch type {
         case kIOPSACPowerValue: return .externalPower
         case kIOPSBatteryPowerValue, kIOPMUPSPowerKey: return .battery
