@@ -88,7 +88,6 @@ profiling is disabled. Older installations can reach GitHub through `teren.in` r
 Maintained by [Vitaly Terenin](https://teren.in/). Contact the maintainer through
 that page. Report problems in the
 [repository's issues](https://github.com/vitalyterenin/awake/issues).
-The source is public; no open-source license has been assigned.
 
 ## Build and release
 
@@ -102,3 +101,10 @@ bash scripts/build-app.sh
 Output: `~/Library/Developer/Awake/Awake.app`.
 See [release operations](docs/releases.md) for runtime checks, publication tests,
 signing and the CI release process.
+
+## License
+
+Project code and assets are licensed under [MIT](LICENSE).
+Bundled components retain their [third-party licenses and notices](THIRD_PARTY_NOTICES.md).
+Both files are included in the DMG and in the installed app's
+`Contents/Resources/Licenses` directory, including automatic updates.
