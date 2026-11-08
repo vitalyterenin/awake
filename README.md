@@ -23,7 +23,7 @@ automatically after access is granted. **Permissions…** opens it when access i
 
 If the switch is on but Awake is still blocked after an update, macOS may have
 kept permission for the previous copy. Remove only Awake from that list with
-**−**, then add the installed `Awake.app` with **+**. **Permission Is Already Enabled…** in the setup window explains this recovery. Input detection failures have a separate
+**−**, then add the installed `Awake.app` with **+**. **Still Blocked?** in the setup window explains this recovery. Input detection failures have a separate
 paused message and recovery instructions; no additional permission is requested.
 
 ## Use

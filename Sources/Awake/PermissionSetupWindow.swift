@@ -9,14 +9,12 @@ final class PermissionSetupWindow: NSWindowController {
     private var closesWhenReady = false
     private let heading = NSTextField(labelWithString: "")
     private let explanation = NSTextField(labelWithString: "")
-    private let instructions = NSTextField(labelWithString: "")
-    private let privacy = NSTextField(labelWithString: "Your mouse and keyboard input is never recorded.")
     private let primary = NSButton(title: "Open System Settings…", target: nil, action: nil)
     private let recheck = NSButton(title: "Check Again", target: nil, action: nil)
     private let later = NSButton(title: "Not Now", target: nil, action: nil)
-    private let helpButton = NSButton(title: "Permission Is Already Enabled…", target: nil, action: nil)
+    private let helpButton = NSButton(title: "Still Blocked?", target: nil, action: nil)
     private let recovery = NSTextField(labelWithString:
-        "Remove only Awake from the permission list with −.\nThen click + and select the installed Awake.app again.\nReturn here and click Check Again.")
+        "In System Settings, remove Awake (−),\nthen add it again (+).")
     private let content = NSView()
     var isVisible: Bool { window?.isVisible == true }
 
@@ -40,13 +38,13 @@ final class PermissionSetupWindow: NSWindowController {
             content.bottomAnchor.constraint(equalToSystemSpacingBelow: stack.bottomAnchor, multiplier: 2)
         ])
         heading.font = .preferredFont(forTextStyle: .headline)
-        for label in [heading, explanation, instructions, privacy, recovery] {
+        for label in [heading, explanation, recovery] {
             label.maximumNumberOfLines = 0
             label.cell?.usesSingleLineMode = false
             label.setContentCompressionResistancePriority(.required, for: .horizontal)
             label.setContentCompressionResistancePriority(.required, for: .vertical)
         }
-        [heading, explanation, instructions, privacy].forEach(stack.addArrangedSubview)
+        [heading, explanation].forEach(stack.addArrangedSubview)
         let separator = NSBox()
         separator.boxType = .separator
         stack.addArrangedSubview(separator)
@@ -77,17 +75,14 @@ final class PermissionSetupWindow: NSWindowController {
         self.state = state
         switch state {
         case .permissionRequired:
-            heading.stringValue = "Awake needs permission"
-            explanation.stringValue = "Awake cannot keep your Mac awake until\ncursor control is allowed."
-            instructions.stringValue = "1. Open System Settings → Privacy & Security.\nChoose Accessibility, called Device Control and Data Access\non newer macOS versions.\n\n2. Turn on Awake. If it is missing, click +\nand select the installed Awake.app.\n\nThis window closes automatically when access is ready."
+            heading.stringValue = "Permission required"
+            explanation.stringValue = "Enable Awake in System Settings to prevent sleep."
         case .monitoringUnavailable:
             heading.stringValue = "Awake is paused"
-            explanation.stringValue = "Cursor control is allowed, but activity detection failed.\nAwake cannot keep your Mac awake until this is fixed."
-            instructions.stringValue = "Open the cursor-control permission in System Settings.\nTurn Awake off, then on, and click Check Again."
+            explanation.stringValue = "Turn Awake off, then on in System Settings."
         case .ready:
             heading.stringValue = "Awake is ready"
-            explanation.stringValue = "Cursor control is allowed."
-            instructions.stringValue = "Use the coffee cup in your menu bar to manage Awake.\nMove, scroll or type to stop the circle and restore brightness."
+            explanation.stringValue = "Control Awake from the menu bar."
         }
         let ready = state == .ready
         primary.title = ready ? "Done" : "Open System Settings…"
