@@ -26,7 +26,7 @@ automatically after access is granted. **Permissions…** opens it when access i
 Upgrading from **0.2.5 or earlier** requires one final permission reset because
 those builds used a different identity for every release. Remove only Awake from
 the permission list with **−**, add the installed copy with **+**, and turn it on.
-**Still Blocked?** shows this recovery. From **0.2.6**, releases use the same
+**Still Blocked?** shows this recovery. From **0.2.7**, releases use the same
 certificate so ordinary updates retain the permission identity. No certificate
 installation or changes to system trust are needed.
 

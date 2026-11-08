@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Keep released app identities bound to the same private signing certificate."""
 import argparse
+from contextlib import contextmanager
 import base64
 import hashlib
 import json
@@ -27,7 +28,9 @@ def run(*args):
     # Never print command arguments: keychain tools receive private passwords.
     result = subprocess.run([str(a) for a in args], capture_output=True, text=True)
     if result.returncode:
-        raise ValueError(f'{args[0]} failed (exit {result.returncode})')
+        # codesign arguments contain only public identity/path data, never passwords.
+        detail = ': ' + result.stderr.strip() if Path(args[0]).name == 'codesign' else ''
+        raise ValueError(f'{args[0]} failed (exit {result.returncode}){detail}')
     return result.stdout + result.stderr
 
 
@@ -46,20 +49,54 @@ def check_requirement(text, identifier, der):
         raise ValueError('Signature must bind the bundle identifier to the persistent certificate')
 
 
+def verify_code(code, der, expected_identifier=None):
+    details = run('codesign', '-d', '-r-', '--verbose=2', code)
+    identity = re.search(r'^Identifier=([A-Za-z0-9_.-]+)$', details, re.M)
+    if not identity or (expected_identifier and identity[1] != expected_identifier):
+        raise ValueError('Unexpected code signing identifier')
+    check_requirement(details, identity[1], der)
+    with tempfile.TemporaryDirectory(prefix='awake-cert-check-') as directory:
+        prefix = Path(directory) / 'certificate'
+        run('codesign', '-d', '--extract-certificates=' + str(prefix), code)
+        if prefix.with_name(prefix.name + '0').read_bytes() != der:
+            raise ValueError('App or updater contains a different signing certificate')
+
+
 def verify(app):
     der = certificate()
     run('codesign', '--verify', '--deep', '--strict', app)
     for code in components(app):
-        details = run('codesign', '-d', '-r-', '--verbose=2', code)
-        identity = re.search(r'^Identifier=([A-Za-z0-9_.-]+)$', details, re.M)
-        if not identity or (code == Path(app) and identity[1] != APP_ID):
-            raise ValueError('Unexpected code signing identifier')
-        check_requirement(details, identity[1], der)
-        with tempfile.TemporaryDirectory(prefix='awake-cert-check-') as directory:
-            prefix = Path(directory) / 'certificate'
-            run('codesign', '-d', '--extract-certificates=' + str(prefix), code)
-            if prefix.with_name(prefix.name + '0').read_bytes() != der:
-                raise ValueError('App or updater contains a different signing certificate')
+        verify_code(code, der, APP_ID if code == Path(app) else None)
+
+
+@contextmanager
+def signing_keychain(keychain):
+    if not keychain:
+        yield
+        return
+    # --keychain selects the identity; codesign still builds its certificate
+    # chain from the search list. Restore that list after the signing operation.
+    previous = shlex.split(run('security', 'list-keychains', '-d', 'user'))
+    try:
+        run('security', 'list-keychains', '-d', 'user', '-s', keychain, *previous)
+        yield
+    finally:
+        run('security', 'list-keychains', '-d', 'user', '-s', *previous)
+
+
+def preflight(keychain):
+    der = certificate()
+    with tempfile.TemporaryDirectory(prefix='awake-signing-preflight-') as directory:
+        source = Path(directory) / 'probe.c'
+        source.write_text('int main(void) { return 0; }\n')
+        executable = Path(directory) / 'awake-signing-probe'
+        run('/usr/bin/cc', source, '-o', executable)
+        with signing_keychain(keychain):
+            run('codesign', '--force', '--sign', hashlib.sha1(der).hexdigest().upper(),
+                '--keychain', keychain, '--timestamp=none', executable)
+            run('codesign', '--verify', '--strict', executable)
+            verify_code(executable, der, 'awake-signing-probe')
+    print('Release private key and certificate-chain signing preflight passed')
 
 
 def sign(app):
@@ -72,14 +109,15 @@ def sign(app):
     args = ['codesign', '--force', '--sign', identity, '--timestamp=none']
     if keychain:
         args += ['--keychain', keychain]
-    for code in components(app):
-        run(*args, code)
-    if keychain:
-        verify(app)
-        print('Signed app and updater with the persistent release identity')
-    else:
-        run('codesign', '--verify', '--deep', '--strict', app)
-        print('Ad hoc development build; release packaging will reject this identity')
+    with signing_keychain(keychain):
+        for code in components(app):
+            run(*args, code)
+        if keychain:
+            verify(app)
+            print('Signed app and updater with the persistent release identity')
+        else:
+            run('codesign', '--verify', '--deep', '--strict', app)
+            print('Ad hoc development build; release packaging will reject this identity')
 
 
 def import_ci(keychain):
@@ -113,6 +151,7 @@ def import_ci(keychain):
             run('security', 'unlock-keychain', '-p', password, keychain)
         finally:
             run('security', 'list-keychains', '-d', 'user', '-s', *search)
+    preflight(keychain)
     with open(os.environ['GITHUB_ENV'], 'a') as environment:
         environment.write(f'AWAKE_SIGN_KEYCHAIN={keychain}\nAWAKE_REQUIRE_RELEASE_SIGNING=1\n')
     print('Imported the pinned release identity; system certificate trust is unchanged')

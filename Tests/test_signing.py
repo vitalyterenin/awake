@@ -47,6 +47,23 @@ class SigningIdentityTests(unittest.TestCase):
                 signing.import_ci('unused.keychain-db')
             command.assert_not_called()
 
+    def test_chain_search_path_is_restored_on_success_and_failure(self):
+        original = ['login.keychain-db', 'system.keychain']
+        for fail in [False, True]:
+            def command(*args):
+                return '"login.keychain-db"\n"system.keychain"\n' if '-s' not in args else ''
+            with patch.object(signing, 'run', side_effect=command) as run:
+                try:
+                    with signing.signing_keychain('release.keychain-db'):
+                        if fail:
+                            raise RuntimeError('Signing failed')
+                except RuntimeError:
+                    pass
+                self.assertEqual(run.call_args_list[1].args,
+                                 ('security', 'list-keychains', '-d', 'user', '-s', 'release.keychain-db', *original))
+                self.assertEqual(run.call_args.args,
+                                 ('security', 'list-keychains', '-d', 'user', '-s', *original))
+
 
 if __name__ == '__main__':
     unittest.main()
