@@ -192,7 +192,7 @@ Missing access opens this window on launch; dismissing it preserves the menu bar
 warning. Granting access closes an open warning window automatically. Reopening
 an already ready app does not create a success window. The **Permissions…** menu
 item can show readiness explicitly. An input-tap failure has its own paused state;
-**Permission Is Already Enabled…** expands recovery instructions in the same window.
+**Still Blocked?** expands recovery instructions in the same window.
 
 `--smoke-test` presents each actual window state in light/dark appearances, invokes
 its real dismiss button and asserts that the window is no longer visible. It also

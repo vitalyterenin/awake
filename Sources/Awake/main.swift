@@ -62,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         statusRow = row("Starting…")
-        permissionRow = row("Setup & Permissions…", #selector(showSetup))
+        permissionRow = row("Permissions…", #selector(showSetup))
         menu.addItem(.separator())
         toggle = row("Keep Mac awake", #selector(toggleAwake))
         delayRow = row("Start cursor motion after")
@@ -156,11 +156,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         permissionRow.title = blocked ? "Finish Setup…" : "Permissions…"
         permissionRow.image = blocked ? NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil) : nil
         statusItem.button?.image = NSImage(systemSymbolName: blocked ? "exclamationmark.triangle.fill" : "cup.and.saucer",
-            accessibilityDescription: blocked ? "Awake is not working. Permission setup required." : "Awake")
+            accessibilityDescription: blocked ? "Awake needs attention." : "Awake")
         statusItem.button?.title = blocked ? " Awake" : ""
         statusItem.button?.appearsDisabled = !awake.enabled && !blocked
-        statusItem.button?.toolTip = blocked ? "Awake is not working. Click Finish Setup to allow cursor control." : "Awake — \(awake.message)"
-        statusItem.button?.setAccessibilityLabel(blocked ? "Awake is not working. Finish permission setup." : "Awake — \(awake.message)")
+        statusItem.button?.toolTip = "Awake — \(blocked ? problem : awake.message)"
+        statusItem.button?.setAccessibilityLabel("Awake — \(blocked ? problem : awake.message)")
         setup?.update(controlState)
         if runtimeStarted, lastControlState != controlState {
             lastControlState = controlState
@@ -243,7 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func about() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [.credits: NSAttributedString(string:
-            "Keeps your Mac awake and moves the cursor after inactivity.\nApple Silicon · No input recording · No telemetry\n\nClosing the lid, choosing Sleep, or a low battery can still put your Mac to sleep.")])
+            "Prevents idle sleep.\nApple Silicon · No input recording · No telemetry")])
     }
 }
 
