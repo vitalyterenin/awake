@@ -1,21 +1,35 @@
 import Foundation
 import CoreGraphics
 
+public enum MotionDelay: Int, CaseIterable, Sendable {
+    case oneMinute = 1
+    case fiveMinutes = 5
+    public var seconds: TimeInterval { TimeInterval(rawValue * 60) }
+}
+
 /// Uses monotonic time supplied by the caller. Own mouse events never reset idle.
 public struct IdleMotion {
-    public static let delay: TimeInterval = 300
     public static let radius: CGFloat = 6
     public static let period: TimeInterval = 24
     public static let eventMarker: Int64 = 0x4157414B45
 
     public private(set) var lastActivity: TimeInterval
     public private(set) var startedAt: TimeInterval?
+    public private(set) var delay: MotionDelay
     private var center = CGPoint.zero
     private var startingAngle: Double = 0
     private var radius: CGFloat = Self.radius
     private var bounds = CGRect.zero
 
-    public init(now: TimeInterval) { lastActivity = now }
+    public init(now: TimeInterval, delay: MotionDelay = .fiveMinutes) {
+        lastActivity = now
+        self.delay = delay
+    }
+
+    public mutating func setDelay(_ delay: MotionDelay, at now: TimeInterval) {
+        self.delay = delay
+        activity(at: now)
+    }
 
     public mutating func activity(at now: TimeInterval, marker: Int64 = 0) {
         guard marker != Self.eventMarker else { return }
@@ -24,7 +38,7 @@ public struct IdleMotion {
     }
 
     public func isReady(at now: TimeInterval) -> Bool {
-        now - lastActivity >= Self.delay
+        now - lastActivity >= delay.seconds
     }
 
     /// Start exactly at the cursor; clamp the small orbit to the current display.

@@ -1,7 +1,7 @@
 # Awake
 
-A small macOS menu bar app that keeps your Mac awake. After five minutes without
-mouse or keyboard activity, the cursor slowly moves in a small circle. Move the
+A small macOS menu bar app that keeps your Mac awake. After one or five minutes
+without mouse or keyboard activity, the cursor slowly moves in a small circle. Move the
 mouse, scroll, click or type and movement stops immediately.
 
 **Apple Silicon only · macOS 13 or later**
@@ -27,18 +27,20 @@ To remove Awake, choose **Quit Awake** and move the app from Applications to Tra
 
 ## Use
 
-The sun icon in the menu bar has one behavior switch: **Keep Mac awake**. It defaults
-to on and remembers your choice between launches. The menu shows the current state
-and the countdown until cursor movement.
+The sun icon in the menu bar has an on/off switch: **Keep Mac awake**. It defaults
+to on and remembers your choice between launches. **Start cursor motion after**
+lets you choose **1 minute** or **5 minutes** (the default). The delay also persists
+between launches. Changing it stops any current motion and starts a fresh countdown.
+The menu shows the current state and the countdown until cursor movement.
 
-The idle delay is five minutes; the nominal circle radius is six points and each
+The nominal circle radius is six points and each
 turn takes 24 seconds. Near screen edges the path is adjusted and clipped to stay
 on the current display, without an initial jump. Move, scroll, click or type to
 stop movement and restart the countdown. Awake does not click, drag or type.
 
 While enabled with Accessibility permission and working input monitoring, a macOS
 power assertion prevents idle display and system sleep, including during the
-five-minute countdown. Choosing Sleep, closing the lid or a low battery can still
+idle countdown. Choosing Sleep, closing the lid or a low battery can still
 put the Mac to sleep. Awake pauses during inactive/locked sessions and starts a
 fresh countdown on return. It does not disable macOS screen locking.
 

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import AwakeCore
 
 #if !arch(arm64)
 #error("Awake supports Apple Silicon (arm64) only.")
@@ -40,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var checkUpdates: NSMenuItem!
     private var automaticChecks: NSMenuItem!
     private var automaticInstalls: NSMenuItem!
+    private var delayRow: NSMenuItem!
+    private var delayChoices: [NSMenuItem] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -54,8 +57,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusRow = row("Starting…")
         menu.addItem(.separator())
         toggle = row("Keep Mac awake", #selector(toggleAwake))
+        delayRow = row("Start cursor motion after")
+        delayRow.isEnabled = true
+        let delayMenu = NSMenu()
+        delayMenu.autoenablesItems = false
+        delayRow.submenu = delayMenu
+        for delay in MotionDelay.allCases {
+            let choice = item(delay == .oneMinute ? "1 minute" : "5 minutes", #selector(selectDelay))
+            choice.tag = delay.rawValue
+            delayMenu.addItem(choice)
+            delayChoices.append(choice)
+        }
         permissionRow = row("Allow Accessibility…", #selector(allowAccessibility))
-        row("Cursor moves after 5 minutes of inactivity.")
+        row("The cursor slowly moves in a small circle.")
         row("Move, scroll or type to stop the circle.")
         menu.addItem(.separator())
         let updateItem = row("Updates")
@@ -90,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.messageText = "Keep your Mac awake."
-            alert.informativeText = "Awake lives in your menu bar. After five minutes without mouse or keyboard activity, your cursor slowly moves in a small circle. Any activity stops it.\n\nAllow Accessibility so Awake can move the cursor and detect when you return. Your input is never recorded or sent anywhere."
+            alert.informativeText = "Awake lives in your menu bar. After one or five minutes without mouse or keyboard activity, your cursor slowly moves in a small circle. Choose the delay in its menu. Any activity stops the motion.\n\nAllow Accessibility so Awake can move the cursor and detect when you return. Your input is never recorded or sent anywhere."
             alert.addButton(withTitle: "Allow Accessibility…")
             alert.addButton(withTitle: "Later")
             if alert.runModal() == .alertFirstButtonReturn { awake.requestPermission() }
@@ -114,6 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshMenu() {
         toggle.state = awake.enabled ? .on : .off
+        delayRow.title = "Start cursor motion after · \(awake.motionDelay.rawValue) min"
+        for choice in delayChoices { choice.state = choice.tag == awake.motionDelay.rawValue ? .on : .off }
         statusRow.title = awake.message
         permissionRow.isHidden = !awake.needsPermission
         statusItem.button?.appearsDisabled = !awake.enabled
@@ -130,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func verifyVisibleMenus() {
         guard let button = statusItem.button, let window = button.window else { exit(1) }
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
-        for visible in [menu, checkUpdates.menu!] {
+        for visible in [menu, delayRow.submenu!, checkUpdates.menu!] {
             let probe = MenuProbe(menu: visible)
             let timer = Timer(timeInterval: 0.25, target: probe,
                               selector: #selector(MenuProbe.inspect), userInfo: nil, repeats: false)
@@ -147,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     func applicationWillTerminate(_ notification: Notification) { awake.stop() }
     @objc private func toggleAwake() { awake.setEnabled(!awake.enabled) }
+    @objc private func selectDelay(_ sender: NSMenuItem) {
+        guard let delay = MotionDelay(rawValue: sender.tag) else { return }
+        awake.setMotionDelay(delay)
+    }
     @objc private func allowAccessibility() { awake.requestPermission() }
     @objc private func checkForUpdates(_ sender: Any?) { updates.check(sender) }
     @objc private func toggleAutomaticChecks() { updates.setAutomaticChecks(!updates.automaticallyChecks); refreshMenu() }
@@ -160,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 }
 
 if CommandLine.arguments.contains("--diagnostics") {
-    print("Awake · arm64 · macOS 13+ · 300-second idle delay · 6-point radius · 24-second circle")
+    print("Awake · arm64 · macOS 13+ · 1- or 5-minute idle delay (default 5) · 6-point radius · 24-second circle")
     print("Accessibility permission: \(AXIsProcessTrusted() ? "allowed" : "not granted")")
     exit(0)
 }
