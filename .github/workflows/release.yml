@@ -25,16 +25,16 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: python3 scripts/release.py validate
-      - name: Test publication safety
-        run: python3 -m unittest discover -s Tests -p 'test_*.py'
-      - name: Test idle behavior and geometry
-        run: bash scripts/test.sh
       - name: Import persistent release signing identity
         if: github.event_name != 'pull_request'
         env:
           AWAKE_SIGNING_P12: ${{ secrets.AWAKE_SIGNING_P12 }}
           AWAKE_SIGNING_PASSWORD: ${{ secrets.AWAKE_SIGNING_PASSWORD }}
         run: python3 scripts/signing.py import-ci --keychain "$RUNNER_TEMP/awake-release.keychain-db"
+      - name: Test publication safety
+        run: python3 -m unittest discover -s Tests -p 'test_*.py'
+      - name: Test idle behavior and geometry
+        run: bash scripts/test.sh
       - name: Build for Apple Silicon
         env:
           AWAKE_OUTPUT_DIR: ${{ runner.temp }}/Awake

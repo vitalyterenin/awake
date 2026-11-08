@@ -163,7 +163,9 @@ certificate with the same name does not preserve identity.
 CI imports the encrypted PKCS#12 identity into a temporary keychain, permits
 `codesign` to use that key, and removes the keychain even when the job fails. The
 user keychain search list is restored after import and no certificate is added to
-system trust. PRs have no signing secrets and use ad hoc development builds.
+system trust. While signing, the keychain is temporarily included in the search
+list so codesign can construct its certificate chain; that list is restored even
+on failure. A native signing preflight runs before compilation. PRs have no signing secrets and use ad hoc development builds.
 The encrypted identity and password also have an owner-only local backup outside
 source. Never print them, commit them or generate a replacement during a routine
 build. A new Mac can publish through the configured CI without copying credentials.
