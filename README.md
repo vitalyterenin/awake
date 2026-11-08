@@ -90,7 +90,7 @@ Quitting restores brightness and normal idle sleep behavior.
 Awake has no telemetry and never records input or reads typed characters. Activity
 is used only to reset the in-memory countdown; events are returned unchanged.
 Network requests are limited to GitHub-hosted Sparkle feeds and downloads; system
-profiling is disabled. Older installations can reach GitHub through `teren.in` redirects.
+profiling is disabled.
 
 Maintained by [Vitaly Terenin](https://teren.in/). Contact the maintainer through
 that page. Report problems in the
