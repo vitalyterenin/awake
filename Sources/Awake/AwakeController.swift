@@ -237,13 +237,13 @@ final class AwakeController {
         }
         guard enabled else {
             stopMotion(); removeTap(); releaseSleepAssertion()
-            message = "Off · normal sleep behavior"
+            message = "Off"
             return
         }
         guard supply.permitsAwake(allowBattery: allowOnBattery) else {
             input(at: ProcessInfo.processInfo.systemUptime)
             removeTap(); releaseSleepAssertion()
-            message = supply == .battery ? "Paused · on battery power" : "Paused · power source unavailable"
+            message = supply == .battery ? "Paused · on battery" : "Paused · power unavailable"
             return
         }
         cursorAccessGranted = !needsPermission
@@ -251,7 +251,7 @@ final class AwakeController {
             inputMonitoringFailed = false
             stopMotion(); removeTap(); releaseSleepAssertion()
             motion.activity(at: ProcessInfo.processInfo.systemUptime)
-            message = "Not working · cursor control permission required"
+            message = "Permission required"
             return
         }
         guard sessionIsUsable else {
@@ -264,13 +264,13 @@ final class AwakeController {
             inputMonitoringFailed = true
             input(at: ProcessInfo.processInfo.systemUptime)
             releaseSleepAssertion()
-            message = "Not working · input detection unavailable"
+            message = "Input detection unavailable"
             return
         }
         inputMonitoringFailed = false
         guard holdSleepAssertion() else {
             stopMotion()
-            message = "Could not prevent sleep · try again"
+            message = "Unable to prevent sleep"
             return
         }
         let now = ProcessInfo.processInfo.systemUptime
@@ -293,14 +293,14 @@ final class AwakeController {
                 let success = dimming.fadeDown(at: now)
                 updateBrightnessClock()
                 message = success
-                    ? (dimming.isAnimating ? "Keeping awake · dimming screen" : "Keeping awake · screen dimmed")
+                    ? (dimming.isAnimating ? "Dimming display" : "Display dimmed")
                     : "Cursor moving · brightness unavailable"
-            } else { message = "Keeping awake · cursor moving" }
+            } else { message = "Moving cursor" }
         }
         else {
             restoreBrightness()
             let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))
-            message = String(format: "Keeping awake · motion in %d:%02d", remaining / 60, remaining % 60)
+            message = String(format: "Awake · motion in %d:%02d", remaining / 60, remaining % 60)
         }
     }
 
