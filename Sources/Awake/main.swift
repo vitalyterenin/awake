@@ -33,6 +33,7 @@ private final class MenuProbe: NSObject {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let awake = AwakeController()
     private let updates = UpdateController()
+    private let runtimeStatus = RuntimeStatus()
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var statusRow: NSMenuItem!
@@ -43,11 +44,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var automaticInstalls: NSMenuItem!
     private var delayRow: NSMenuItem!
     private var delayChoices: [NSMenuItem] = []
+    private var dimRow: NSMenuItem!
+    private var batteryRow: NSMenuItem!
+    private var setup: PermissionSetupWindow?
+    private var runtimeStarted = false
+    private var lastControlState: CursorControlState?
+    private var previewControlState: CursorControlState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "sun.max", accessibilityDescription: "Awake")
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.image = NSImage(systemSymbolName: "cup.and.saucer", accessibilityDescription: "Awake")
         statusItem.menu = menu
         menu.delegate = self
         menu.autoenablesItems = false
@@ -55,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         statusRow = row("Starting…")
+        permissionRow = row("Setup & Permissions…", #selector(showSetup))
         menu.addItem(.separator())
         toggle = row("Keep Mac awake", #selector(toggleAwake))
         delayRow = row("Start cursor motion after")
@@ -68,9 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             delayMenu.addItem(choice)
             delayChoices.append(choice)
         }
-        permissionRow = row("Allow Accessibility…", #selector(allowAccessibility))
-        row("The cursor slowly moves in a small circle.")
-        row("Move, scroll or type to stop the circle.")
+        dimRow = row("Dim display while idle", #selector(toggleDimming))
+        batteryRow = row("Allow on battery power", #selector(toggleBattery))
         menu.addItem(.separator())
         let updateItem = row("Updates")
         updateItem.isEnabled = true
@@ -86,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quit = row("Quit Awake", #selector(quitApp))
         quit.keyEquivalent = "q"
         awake.didChange = { [weak self] in self?.refreshMenu() }
-        updates.start()
+        if CommandLine.arguments.contains("--preview-setup") { previewControlState = .permissionRequired }
         refreshMenu()
         if CommandLine.arguments.contains("--smoke-test") {
             guard menu.items.last?.title == "Quit Awake", menu.items.count >= 10,
@@ -94,20 +101,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async { self.verifyVisibleMenus() }
             return
         }
+        if CommandLine.arguments.contains("--preview-setup") {
+            DispatchQueue.main.async { self.showSetup() }
+            return
+        }
         if CommandLine.arguments.contains("--preview-menu") {
             DispatchQueue.main.async { self.statusItem.button?.performClick(nil) }
             return
         }
+        updates.start()
         awake.start()
-        if !UserDefaults.standard.bool(forKey: "didWelcome") {
+        runtimeStarted = true
+        lastControlState = awake.cursorControlState
+        runtimeStatus.start { [weak self] in self?.awake.diagnostics ?? [:] }
+        let firstLaunch = !UserDefaults.standard.bool(forKey: "didWelcome")
+        if firstLaunch || awake.cursorControlState != .ready {
             UserDefaults.standard.set(true, forKey: "didWelcome")
-            NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.messageText = "Keep your Mac awake."
-            alert.informativeText = "Awake lives in your menu bar. After one or five minutes without mouse or keyboard activity, your cursor slowly moves in a small circle. Choose the delay in its menu. Any activity stops the motion.\n\nAllow Accessibility so Awake can move the cursor and detect when you return. Your input is never recorded or sent anywhere."
-            alert.addButton(withTitle: "Allow Accessibility…")
-            alert.addButton(withTitle: "Later")
-            if alert.runModal() == .alertFirstButtonReturn { awake.requestPermission() }
+            showSetup()
         }
     }
 
@@ -128,12 +138,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshMenu() {
         toggle.state = awake.enabled ? .on : .off
+        dimRow.state = awake.dimWhileIdle ? .on : .off
+        batteryRow.state = awake.allowOnBattery ? .on : .off
         delayRow.title = "Start cursor motion after · \(awake.motionDelay.rawValue) min"
         for choice in delayChoices { choice.state = choice.tag == awake.motionDelay.rawValue ? .on : .off }
-        statusRow.title = awake.message
-        permissionRow.isHidden = !awake.needsPermission
-        statusItem.button?.appearsDisabled = !awake.enabled
-        statusItem.button?.toolTip = "Awake — \(awake.message)"
+        let controlState = previewControlState ?? awake.cursorControlState
+        let blocked = controlState != .ready
+        let problem = controlState == .permissionRequired
+            ? "Not working · permission required" : "Not working · input detection blocked"
+        statusRow.title = blocked ? problem : awake.message
+        statusRow.action = blocked ? #selector(showSetup) : nil
+        statusRow.isEnabled = blocked
+        statusRow.image = blocked ? NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil) : nil
+        permissionRow.title = blocked ? "Finish Setup…" : "Permissions…"
+        permissionRow.image = blocked ? NSImage(systemSymbolName: "arrow.up.forward.app", accessibilityDescription: nil) : nil
+        statusItem.button?.image = NSImage(systemSymbolName: blocked ? "exclamationmark.triangle.fill" : "cup.and.saucer",
+            accessibilityDescription: blocked ? "Awake is not working. Permission setup required." : "Awake")
+        statusItem.button?.title = blocked ? " Awake" : ""
+        statusItem.button?.appearsDisabled = !awake.enabled && !blocked
+        statusItem.button?.toolTip = blocked ? "Awake is not working. Click Finish Setup to allow cursor control." : "Awake — \(awake.message)"
+        statusItem.button?.setAccessibilityLabel(blocked ? "Awake is not working. Finish permission setup." : "Awake — \(awake.message)")
+        setup?.update(controlState)
+        if runtimeStarted, lastControlState != controlState {
+            lastControlState = controlState
+            if blocked { showSetup() }
+        }
         checkUpdates.isEnabled = updates.canCheck
         automaticChecks.isEnabled = updates.isConfigured
         automaticInstalls.isEnabled = updates.isConfigured
@@ -158,16 +187,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 exit(1)
             }
         }
-        print("Awake menu smoke test passed without monitoring or synthetic movement.")
+        let setup = setupWindow()
+        setup.present()
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            for state in [CursorControlState.permissionRequired, .monitoringUnavailable, .ready] {
+                setup.update(state)
+                setup.window?.appearance = NSAppearance(named: appearance)
+                guard setup.verifyLayout() else { exit(1) }
+            }
+        }
+        setup.close()
+        print("Awake menu and setup smoke test passed without monitoring or synthetic movement.")
         NSApp.terminate(nil)
     }
-    func applicationWillTerminate(_ notification: Notification) { awake.stop() }
-    @objc private func toggleAwake() { awake.setEnabled(!awake.enabled) }
+    func applicationWillTerminate(_ notification: Notification) { if runtimeStarted { awake.stop() } }
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showSetup()
+        return true
+    }
+    func applicationDidBecomeActive(_ notification: Notification) {
+        if runtimeStarted { awake.recheckCursorControl() }
+    }
+    private func setupWindow() -> PermissionSetupWindow {
+        if let setup { return setup }
+        let setup = PermissionSetupWindow()
+        setup.openSettings = { [weak self] in self?.awake.requestPermission() }
+        setup.checkAgain = { [weak self] in
+            guard let self else { return }
+            self.awake.recheckCursorControl()
+            self.setup?.update(self.previewControlState ?? self.awake.cursorControlState)
+        }
+        self.setup = setup
+        return setup
+    }
+    @objc private func showSetup() {
+        let setup = setupWindow()
+        setup.update(previewControlState ?? awake.cursorControlState)
+        setup.present()
+    }
+    @objc private func toggleAwake() {
+        awake.setEnabled(!awake.enabled)
+        if awake.enabled && awake.cursorControlState != .ready { showSetup() }
+    }
+    @objc private func toggleDimming() { awake.setDimWhileIdle(!awake.dimWhileIdle) }
+    @objc private func toggleBattery() { awake.setAllowOnBattery(!awake.allowOnBattery) }
     @objc private func selectDelay(_ sender: NSMenuItem) {
         guard let delay = MotionDelay(rawValue: sender.tag) else { return }
         awake.setMotionDelay(delay)
     }
-    @objc private func allowAccessibility() { awake.requestPermission() }
     @objc private func checkForUpdates(_ sender: Any?) { updates.check(sender) }
     @objc private func toggleAutomaticChecks() { updates.setAutomaticChecks(!updates.automaticallyChecks); refreshMenu() }
     @objc private func toggleAutomaticInstalls() { updates.setAutomaticInstallation(!updates.automaticallyInstalls); refreshMenu() }
@@ -175,12 +242,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func about() {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [.credits: NSAttributedString(string:
-            "A small circle. An awake Mac.\nApple Silicon · No input recording · No telemetry\n\nAwake prevents idle sleep while enabled. Closing the lid, choosing Sleep, or a low battery can still put your Mac to sleep.")])
+            "Keeps your Mac awake and moves the cursor after inactivity.\nApple Silicon · No input recording · No telemetry\n\nClosing the lid, choosing Sleep, or a low battery can still put your Mac to sleep.")])
     }
 }
 
+if CommandLine.arguments.contains("--status") { exit(RuntimeStatus.query() ? 0 : 1) }
+
 if CommandLine.arguments.contains("--diagnostics") {
-    print("Awake · arm64 · macOS 13+ · 1- or 5-minute idle delay (default 5) · 6-point radius · 24-second circle")
+    print("Awake · arm64 · macOS 13+ · 1- or 5-minute idle delay (default 5) · 12-point radius · 4-second circle")
     print("Accessibility permission: \(AXIsProcessTrusted() ? "allowed" : "not granted")")
     exit(0)
 }
