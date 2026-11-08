@@ -8,7 +8,7 @@ click or type to stop the motion and restart the countdown.
 
 ## Install
 
-1. Download [Awake.dmg](https://teren.in/apps/Awake.dmg), drag Awake to
+1. Download [Awake.dmg](https://github.com/vitalyterenin/awake/releases/latest/download/Awake.dmg), drag Awake to
    Applications, eject the disk image, and open the installed app.
 2. The app is ad hoc signed and is not notarized. If macOS blocks its first launch,
    use **System Settings → Privacy & Security → Open Anyway**.
@@ -83,13 +83,13 @@ Quitting restores brightness and normal idle sleep behavior.
 
 Awake has no telemetry and never records input or reads typed characters. Activity
 is used only to reset the in-memory countdown; events are returned unchanged.
-Network requests are limited to Sparkle updates from `teren.in`; system profiling
-is disabled.
+Network requests are limited to GitHub-hosted Sparkle feeds and downloads; system
+profiling is disabled. Older installations can reach GitHub through `teren.in` redirects.
 
 Maintained by [Vitaly Terenin](https://teren.in/). Contact the maintainer through
-that page. Source access holders can also report problems in the
+that page. Report problems in the
 [repository's issues](https://github.com/vitalyterenin/awake/issues).
-The source repository is private; no open-source license has been assigned.
+The source is public; no open-source license has been assigned.
 
 ## Build and release
 

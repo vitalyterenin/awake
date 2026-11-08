@@ -18,4 +18,5 @@ Run `bash scripts/test.sh` and `bash scripts/build-app.sh` before release.
 
 Use the `app-release` skill and its refreshed shared publishing guide.
 Keep app-specific release operations in `docs/releases.md`.
-Publish only `apps/Awake.dmg` and `apps/feeds/awake.xml` from this repository.
+Publish the current Awake.dmg through this repository's GitHub Releases and the
+signed appcast through its GitHub Pages deployment. Never add cloud storage keys.
