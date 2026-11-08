@@ -13,7 +13,9 @@ click or type to stop the motion and restart the countdown.
 2. The app is ad hoc signed and is not notarized. If macOS blocks its first launch,
    use **System Settings → Privacy & Security → Open Anyway**.
 3. Allow Awake in **Privacy & Security → Accessibility**, called **Device Control
-   and Data Access** on newer macOS versions. The setup dialog links to this pane.
+   and Data Access** on newer macOS versions. Click **Open System Settings…**
+   and turn Awake on in the list. If it is missing, click **Not Listed?** in the helper and drag its icon into the list.
+   **Show in Finder** reveals the installed copy for adding with **+**.
 
 Until cursor control is allowed, Awake does not prevent sleep or move the cursor.
 The setup dialog opens on each launch with missing permission. A warning triangle
@@ -23,8 +25,8 @@ automatically after access is granted. **Permissions…** opens it when access i
 
 If the switch is on but Awake is still blocked after an update, macOS may have
 kept permission for the previous copy. Remove only Awake from that list with
-**−**, then add the installed `Awake.app` with **+**. **Still Blocked?** in the setup window explains this recovery. Input detection failures have a separate
-paused message and recovery instructions; no additional permission is requested.
+**−**, then add the installed `Awake.app` again. **Still Blocked?** in the setup
+window explains this recovery. Input detection failures have a separate paused message and recovery instructions; no additional permission is requested.
 
 ## Use
 
