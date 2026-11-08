@@ -18,13 +18,12 @@ click or type to stop the motion and restart the countdown.
 Until cursor control is allowed, Awake does not prevent sleep or move the cursor.
 The setup dialog opens on each launch with missing permission. A warning triangle
 and the name **Awake** replace the coffee cup in the menu bar; closing the dialog
-leaves the warning visible. **Finish Setup…** reopens it. The dialog updates
+leaves the warning visible. **Finish Setup…** reopens it. The window closes
 automatically after access is granted. **Permissions…** opens it when access is ready.
 
 If the switch is on but Awake is still blocked after an update, macOS may have
 kept permission for the previous copy. Remove only Awake from that list with
-**−**, then add the installed `Awake.app` with **+**. The setup dialog's standard
-help button explains this recovery. Input detection failures have a separate
+**−**, then add the installed `Awake.app` with **+**. **Permission Is Already Enabled…** in the setup window explains this recovery. Input detection failures have a separate
 paused message and recovery instructions; no additional permission is requested.
 
 ## Use
