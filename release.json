@@ -7,9 +7,6 @@
   "publicEDKey": "t3cMZEYumH7YinrOKAQg9Za9NXRqVgsgH5DR28Cm7qM=",
   "githubRepository": "vitalyterenin/awake",
   "name": "Awake",
-  "legacyFeedURLs": [
-    "https://teren.in/apps/feeds/awake.xml"
-  ],
   "license": "MIT",
   "codeSigningCertificateSHA256": "d699b917c59b5479f2796416ce9c1297d60aa3ffba9230f388cca3525c609f45"
 }

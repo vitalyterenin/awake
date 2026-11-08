@@ -92,8 +92,7 @@ is used only to reset the in-memory countdown; events are returned unchanged.
 Network requests are limited to GitHub-hosted Sparkle feeds and downloads; system
 profiling is disabled.
 
-Maintained by [Vitaly Terenin](https://teren.in/). Contact the maintainer through
-that page. Report problems in the
+Maintained by [Vitaly Terenin](https://github.com/vitalyterenin). Report problems in the
 [repository's issues](https://github.com/vitalyterenin/awake/issues).
 
 ## Build and release
