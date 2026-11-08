@@ -3,7 +3,7 @@ import QuartzCore
 
 @MainActor
 final class CursorAnimationClock: NSObject {
-    var frame: (() -> Void)?
+    var frame: (@MainActor () -> Void)?
     private var displayLink: AnyObject?
     private var fallback: Timer?
 

@@ -10,6 +10,10 @@ public protocol DisplayBrightnessAccess: AnyObject {
 /// Captures each display once and journals before changing its real brightness.
 @MainActor
 public final class IdleDimming {
+    public enum Status {
+        case dimming, dimmed, unavailable, partiallyUnavailable
+    }
+
     public static let minimumLevel: Float = 1 / 16
     public static let dimDuration: TimeInterval = 5
     public static let restoreDuration: TimeInterval = 0.5
@@ -24,6 +28,16 @@ public final class IdleDimming {
         let restoring: Bool
     }
     private var transition: Transition?
+    private var dimmingDisplays: Set<String> = []
+    private var failedDimmingDisplays: Set<String> = []
+    public var status: Status {
+        guard !dimmingDisplays.isEmpty else { return .unavailable }
+        let failed = failedDimmingDisplays.intersection(dimmingDisplays)
+        if !failed.isEmpty {
+            return failed == dimmingDisplays ? .unavailable : .partiallyUnavailable
+        }
+        return transition?.restoring == false ? .dimming : .dimmed
+    }
     public var isAnimating: Bool { transition != nil }
     public var transitionName: String {
         guard let transition else { return "none" }
@@ -67,10 +81,15 @@ public final class IdleDimming {
     public func fadeDown(at now: TimeInterval) -> Bool {
         if let transition, !transition.restoring { return true }
         let levels = backend.levels().filter { Self.valid($0.value) }
+        dimmingDisplays = Set(levels.keys)
         guard !levels.isEmpty else { return false }
         var from: [String: Float] = [:]
         var to: [String: Float] = [:]
-        for (id, current) in levels where current > Self.minimumLevel + 0.001 {
+        for (id, current) in levels {
+            guard current > Self.minimumLevel + 0.001 else {
+                failedDimmingDisplays.remove(id)
+                continue
+            }
             if savedLevels[id] == nil {
                 savedLevels[id] = current
                 persist(savedLevels)
@@ -115,12 +134,15 @@ public final class IdleDimming {
             let start = plan.from[id]!
             let value = u >= 1 ? target : start + (target - start) * eased
             if backend.setLevel(value, for: id) {
+                // Scheduling a retry is not success; only an observed write clears failure.
+                failedDimmingDisplays.remove(id)
                 if u >= 1 && plan.restoring {
                     savedLevels.removeValue(forKey: id)
                     journalChanged = true
                 }
             } else {
                 success = false
+                if !plan.restoring { failedDimmingDisplays.insert(id) }
                 plan.to.removeValue(forKey: id)
                 plan.from.removeValue(forKey: id)
             }
@@ -139,6 +161,7 @@ public final class IdleDimming {
         var changed = false
         for (id, original) in savedLevels where available[id] != nil {
             if backend.setLevel(original, for: id) {
+                failedDimmingDisplays.remove(id)
                 savedLevels.removeValue(forKey: id)
                 changed = true
             }

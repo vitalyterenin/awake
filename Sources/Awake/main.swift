@@ -1,4 +1,5 @@
 import AppKit
+import AwakeRuntime
 import ApplicationServices
 import AwakeCore
 
@@ -181,6 +182,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func verifyVisibleMenus() {
         guard let button = statusItem.button, let window = button.window else { exit(1) }
         let anchor = window.convertToScreen(button.convert(button.bounds, to: nil))
+        // Exercise the longest runtime message without starting hardware effects.
+        let previousStatus = statusRow.title
+        menu.delegate = nil
+        statusRow.title = "Cursor moving · some displays unavailable"
+        defer { statusRow.title = previousStatus; menu.delegate = self }
         for visible in [menu, delayRow.submenu!, checkUpdates.menu!] {
             let probe = MenuProbe(menu: visible)
             let timer = Timer(timeInterval: 0.25, target: probe,

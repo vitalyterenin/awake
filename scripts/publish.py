@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Publish a verified DMG to GitHub Releases, then verify Pages and prune old DMGs."""
 import argparse
+import errno
 import hashlib
+import http.client
 import json
+import math
 import os
 import pathlib
 import re
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -13,9 +17,9 @@ import urllib.request
 from release import ARCHIVE_NAME, NS, config, read_feed
 
 
-def public_bytes(url):
+def public_bytes(url, timeout=60):
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, headers={'Cache-Control': 'no-cache'}), timeout=60) as response:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={'Cache-Control': 'no-cache'}), timeout=timeout) as response:
             return response.read()
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -147,14 +151,49 @@ def publish(directory, client=None, fetch=public_bytes):
     print('GitHub DMG verified; signed feed is ready for Pages deployment')
 
 
-def verify(directory, client=None, fetch=public_bytes, attempts=24, sleep=time.sleep):
+def transient_fetch_error(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in (408, 429, 500, 502, 503, 504)
+    if isinstance(error, urllib.error.URLError):
+        error = error.reason
+    if isinstance(error, socket.gaierror):
+        return error.errno == socket.EAI_AGAIN
+    return (isinstance(error, (TimeoutError, ConnectionError, http.client.IncompleteRead))
+            or isinstance(error, OSError) and error.errno in
+            (errno.ETIMEDOUT, errno.ENETUNREACH, errno.EHOSTUNREACH))
+
+
+def verify(directory, client=None, fetch=None, attempts=24, sleep=time.sleep,
+           timeout=180, clock=time.monotonic):
+    if attempts < 1 or not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('Verification requires positive attempt and time budgets')
     data, _, feed, archive = load(directory)
+    deadline = clock() + timeout
+    failure = 'Public feed/download did not converge; older downloads were preserved'
+
+    def read(url):
+        remaining = deadline - clock()
+        if remaining <= 0:
+            raise TimeoutError('Public verification deadline reached')
+        # Bound each production read by the remaining budget. Check again after
+        # reads: socket timeouts alone are not a wall-clock deadline for a body.
+        return fetch(url) if fetch is not None else public_bytes(url, timeout=min(60, remaining))
+
     for attempt in range(attempts):
-        if fetch(data['feedURL']) == feed and fetch(data['downloadURL']) == archive:
+        if clock() >= deadline:
+            raise ValueError(failure)
+        try:
+            matches = read(data['feedURL']) == feed and read(data['downloadURL']) == archive
+        except (OSError, http.client.HTTPException) as error:
+            if not transient_fetch_error(error):
+                raise
+            matches = False
+        remaining = deadline - clock()
+        if matches and remaining > 0:
             break
-        if attempt + 1 == attempts:
-            raise ValueError('Public feed/download did not converge; older downloads were preserved')
-        sleep(5)
+        if attempt + 1 == attempts or remaining <= 0:
+            raise ValueError(failure)
+        sleep(min(5, remaining))
     client = client or GitHub(data['githubRepository'])
     tag = 'v' + data['version']
     latest = client.request('/releases/latest')

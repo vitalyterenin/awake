@@ -1,4 +1,5 @@
 import AppKit
+import AwakeRuntime
 
 /// A normal AppKit window with native controls and intrinsic content sizing.
 @MainActor

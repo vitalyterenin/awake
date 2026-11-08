@@ -85,7 +85,15 @@ workflow serializes releases rather than cancelling an in-flight publisher.
 GitHub controls CDN caching. A cached older feed can briefly disagree with the
 current DMG; Sparkle rejects the mismatch and a fresh check can retry. Never disable
 signature checks to mask caching or deployment failures. Bounded verification waits
-for Pages propagation and fails if the public objects do not converge.
+for Pages propagation and fails if the public objects do not converge. Final public
+verification allows up to 24 attempts within a 180-second acceptance budget, with
+five-second waits capped by the remaining budget. It retries byte mismatch/404,
+temporary DNS failure, connection failure, timeout, incomplete responses and HTTP
+408, 429, 500, 502, 503 or 504. Other failures, including certificate validation and
+permanent HTTP errors, stop immediately. Each network read uses at most the
+remaining budget (capped at 60 seconds); a response arriving after the deadline
+cannot authorize cleanup. Socket timeouts do not strictly cap the total duration
+of a slowly streamed response. GitHub mutations are not automatically retried.
 
 The previous signed feed is read only from this repository's GitHub Pages URL.
 An unavailable feed stops the release; no alternate host or first-release reset is used.
@@ -121,15 +129,16 @@ Xcode or Command Line Tools:
 
 ```sh
 python3 scripts/release.py validate
-python3 -m unittest discover -s Tests -p 'test_*.py'
 bash scripts/test.sh
 bash scripts/build-app.sh
 ```
 
 Publication tests use fake GitHub/network clients and never upload live files.
 They cover artifact tampering, stale feeds, repository/tag boundaries, downgrade
-and build reuse rejection, exact-byte retry, and cleanup only after public
-verification. All Python publication code uses the standard library.
+and build reuse rejection, exact-byte retry, bounded transient-error recovery,
+deadline exhaustion and cleanup only after public verification. CI runs the full
+Swift/Python test entry point once. All Python publication code uses the standard
+library.
 
 Build/cache paths stay outside Documents. Overrides: `AWAKE_BUILD_DIR`,
 `AWAKE_OUTPUT_DIR`, `AWAKE_TOOLS_DIR`, `AWAKE_SIGN_KEYCHAIN`, and
@@ -246,6 +255,8 @@ without starting input monitoring.
 Native dimming dynamically resolves DisplayServices read/write functions and checks
 their results. The target is 1/16 of the system brightness slider. Unsupported and
 sleeping displays are skipped; brightness is never raised to reach the dim target.
+The menu reports all/partial write failure until an observed successful write or
+an already-dim reading clears it; merely scheduling a retry does not report success.
 Saved levels use stable display UUIDs and are journaled in UserDefaults before a
 write, then removed only after successful restoration. Input, pause, disable and
 normal quit restore levels; startup recovers values left by forced termination.

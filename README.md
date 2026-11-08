@@ -63,6 +63,9 @@ Turning the option or Awake off, pausing, or quitting restores brightness as wel
 Normal quit and session suspension restore immediately. If forced termination
 interrupts dimming, the next launch recovers saved levels. A disconnected display
 keeps its recovery value until it can be restored.
+If brightness changes fail, the menu shows that brightness is unavailable or that
+some displays are unavailable. Cursor motion continues, and recovery values remain
+saved until brightness restoration succeeds.
 
 With battery use disabled, Awake pauses on battery, restores brightness and allows
 normal idle sleep. Connecting power starts a fresh countdown. Unknown power sources
@@ -107,6 +110,9 @@ bash scripts/build-app.sh
 Output: `~/Library/Developer/Awake/Awake.app`.
 See [release operations](docs/releases.md) for runtime checks, publication tests,
 signing and the CI release process.
+See [architecture](docs/architecture.md) for runtime and persistence contracts, and
+the [refactoring review](docs/refactoring-review.md) for findings, implemented changes
+and verification results.
 
 ## License
 
