@@ -162,16 +162,22 @@ exact current app bundle again. This preserves unrelated permissions and updates
 the grant to the intended binary. Then verify the Awake-owned power assertion
 and real, Awake-tagged mouse motion after the selected idle interval.
 
-Permission setup uses a modeless system `NSAlert` with the standard warning or
-informational appearance, system-sized buttons, and a native help sheet. Do not
-add custom drawing, cards, colors, typography, or button/window dimensions. Updates
-rebuild the dialog only when its permission state changes and preserve focus.
-Verify that a missing grant opens it on every launch, closing it preserves the
-warning triangle/name in the menu bar, and granting access updates it to ready
-without restarting Awake. A later permission loss must reopen setup once per
-blocked transition, rather than every heartbeat. An input-tap failure has its own
-blocked state. `--preview-setup` previews the missing-permission screen without
-starting input monitoring; `--smoke-test` also checks all three setup layouts.
+Permission setup uses a normal `NSWindowController` window with standard AppKit
+labels, push buttons, system spacing and intrinsic content sizing. It does not
+borrow `NSAlert.window` or show an alert outside its supported presentation API.
+Missing access opens this window on launch; dismissing it preserves the menu bar
+warning. Granting access closes an open warning window automatically. Reopening
+an already ready app does not create a success window. The **Permissions…** menu
+item can show readiness explicitly. An input-tap failure has its own paused state;
+**Permission Is Already Enabled…** expands recovery instructions in the same window.
+
+`--smoke-test` presents each actual window state in light/dark appearances, invokes
+its real dismiss button and asserts that the window is no longer visible. It also
+checks closure when access becomes ready. `--status` includes `setupVisible` for
+verification without reopening a window. Inspect and save a real, nonblank window
+screenshot during UI changes; accessibility text and valid layout bounds alone do
+not prove that a window renders. `--preview-setup` shows the missing-access state
+without starting input monitoring.
 
 Native dimming dynamically resolves DisplayServices read/write functions and checks
 their results. The target is 1/16 of the system brightness slider. Unsupported and

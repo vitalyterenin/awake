@@ -12,8 +12,11 @@ pause, disable and normal quit, and retain a recovery value until restoration su
 Never collect keystrokes, record input, add telemetry, or suppress user events.
 Stop synthetic movement on real activity, session suspension or lost permission.
 Use standard AppKit styling and controls; no custom-drawn interface, cards, fonts,
-colors or button/window dimensions. Missing cursor control must open the setup dialog and leave a visible warning in
+colors or fixed button/window dimensions. Size content intrinsically and use semantic
+system fonts. Missing cursor control must open the setup window and leave a visible warning in
 the menu bar until resolved. Never imply Awake is working while access is blocked.
+Verify real rendered UI and actual window dismissal; accessibility text alone is
+insufficient. Never display NSAlert.window as a modeless window.
 Run `bash scripts/test.sh` and `bash scripts/build-app.sh` before release.
 
 Use the `app-release` skill and its refreshed shared publishing guide.

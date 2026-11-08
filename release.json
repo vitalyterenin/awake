@@ -1,6 +1,6 @@
 {
-  "version": "0.2.1",
-  "build": "4",
+  "version": "0.2.2",
+  "build": "5",
   "id": "awake",
   "feedURL": "https://vitalyterenin.github.io/awake/appcast.xml",
   "downloadURL": "https://github.com/vitalyterenin/awake/releases/latest/download/Awake.dmg",

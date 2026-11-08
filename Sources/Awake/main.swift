@@ -113,7 +113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         awake.start()
         runtimeStarted = true
         lastControlState = awake.cursorControlState
-        runtimeStatus.start { [weak self] in self?.awake.diagnostics ?? [:] }
+        runtimeStatus.start { [weak self] in
+            guard let self else { return [:] }
+            return self.awake.diagnostics.merging(["setupVisible": self.setup?.isVisible == true]) { _, new in new }
+        }
         let firstLaunch = !UserDefaults.standard.bool(forKey: "didWelcome")
         if firstLaunch || awake.cursorControlState != .ready {
             UserDefaults.standard.set(true, forKey: "didWelcome")
@@ -188,21 +191,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         let setup = setupWindow()
-        setup.present()
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for state in [CursorControlState.permissionRequired, .monitoringUnavailable, .ready] {
-                setup.update(state)
-                setup.window?.appearance = NSAppearance(named: appearance)
-                guard setup.verifyLayout() else { exit(1) }
+                guard setup.verifyPresentation(state, appearance: appearance) else { exit(1) }
             }
+            guard setup.verifyPresentation(.permissionRequired, appearance: appearance,
+                                           grantWhileOpen: true) else { exit(1) }
         }
-        setup.close()
         print("Awake menu and setup smoke test passed without monitoring or synthetic movement.")
         NSApp.terminate(nil)
     }
     func applicationWillTerminate(_ notification: Notification) { if runtimeStarted { awake.stop() } }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        showSetup()
+        if awake.cursorControlState != .ready { showSetup() }
         return true
     }
     func applicationDidBecomeActive(_ notification: Notification) {
