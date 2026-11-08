@@ -1,6 +1,6 @@
 {
-  "version": "0.2.5",
-  "build": "8",
+  "version": "0.2.6",
+  "build": "9",
   "id": "awake",
   "feedURL": "https://vitalyterenin.github.io/awake/appcast.xml",
   "downloadURL": "https://github.com/vitalyterenin/awake/releases/latest/download/Awake.dmg",
@@ -10,5 +10,6 @@
   "legacyFeedURLs": [
     "https://teren.in/apps/feeds/awake.xml"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "codeSigningCertificateSHA256": "d699b917c59b5479f2796416ce9c1297d60aa3ffba9230f388cca3525c609f45"
 }

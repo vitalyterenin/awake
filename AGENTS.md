@@ -20,6 +20,14 @@ Verify real rendered UI and actual window dismissal; accessibility text alone is
 insufficient. Never display NSAlert.window as a modeless window.
 Run `bash scripts/test.sh` and `bash scripts/build-app.sh` before release.
 
+Release apps and every updater component must use the persistent certificate in
+Resources/ReleaseSigning.cer, pinned by release.json. Never regenerate it, change
+the bundle ID, use an identifier-only requirement or publish an ad hoc build.
+Keep its private key outside source and in encrypted repository Secrets. Do not
+add certificate trust or disable platform protections. Local development can use
+ad hoc signing, but never replace the installed stable app with that identity.
+Test permission continuity between different executables signed by the same key.
+
 Use the `app-release` skill and its refreshed shared publishing guide.
 Keep app-specific release operations in `docs/releases.md`.
 Publish the current Awake.dmg through this repository's GitHub Releases and the
