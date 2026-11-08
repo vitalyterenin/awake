@@ -29,6 +29,12 @@ jobs:
         run: python3 -m unittest discover -s Tests -p 'test_*.py'
       - name: Test idle behavior and geometry
         run: bash scripts/test.sh
+      - name: Import persistent release signing identity
+        if: github.event_name != 'pull_request'
+        env:
+          AWAKE_SIGNING_P12: ${{ secrets.AWAKE_SIGNING_P12 }}
+          AWAKE_SIGNING_PASSWORD: ${{ secrets.AWAKE_SIGNING_PASSWORD }}
+        run: python3 scripts/signing.py import-ci --keychain "$RUNNER_TEMP/awake-release.keychain-db"
       - name: Build for Apple Silicon
         env:
           AWAKE_OUTPUT_DIR: ${{ runner.temp }}/Awake
@@ -57,6 +63,12 @@ jobs:
           path: ${{ runner.temp }}/release/
           if-no-files-found: error
           retention-days: 14
+      - name: Remove temporary signing keychain
+        if: always() && github.event_name != 'pull_request'
+        run: |
+          if [[ -f "$RUNNER_TEMP/awake-release.keychain-db" ]]; then
+            security delete-keychain "$RUNNER_TEMP/awake-release.keychain-db"
+          fi
 
   publish:
     if: github.ref_type == 'tag'

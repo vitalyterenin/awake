@@ -10,7 +10,7 @@ click or type to stop the motion and restart the countdown.
 
 1. Download [Awake.dmg](https://github.com/vitalyterenin/awake/releases/latest/download/Awake.dmg), drag Awake to
    Applications, eject the disk image, and open the installed app.
-2. The app is ad hoc signed and is not notarized. If macOS blocks its first launch,
+2. The app uses a persistent signing certificate and is not notarized. If macOS blocks its first launch,
    use **System Settings → Privacy & Security → Open Anyway**.
 3. Allow Awake in **Privacy & Security → Accessibility**, called **Device Control
    and Data Access** on newer macOS versions. Click **Open System Settings…**
@@ -23,10 +23,15 @@ and the name **Awake** replace the coffee cup in the menu bar; closing the dialo
 leaves the warning visible. **Finish Setup…** reopens it. The window closes
 automatically after access is granted. **Permissions…** opens it when access is ready.
 
-If the switch is on but Awake is still blocked after an update, macOS may have
-kept permission for the previous copy. Remove only Awake from that list with
-**−**, then add the installed `Awake.app` again. **Still Blocked?** in the setup
-window explains this recovery. Input detection failures have a separate paused message and recovery instructions; no additional permission is requested.
+Upgrading from **0.2.5 or earlier** requires one final permission reset because
+those builds used a different identity for every release. Remove only Awake from
+the permission list with **−**, add the installed copy with **+**, and turn it on.
+**Still Blocked?** shows this recovery. From **0.2.6**, releases use the same
+certificate so ordinary updates retain the permission identity. No certificate
+installation or changes to system trust are needed.
+
+Input detection failures have a separate paused message and recovery instructions;
+no additional permission is requested.
 
 ## Use
 

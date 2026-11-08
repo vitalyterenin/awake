@@ -17,7 +17,9 @@ unchanged when moving computers or hosting. The project is MIT-licensed; third-p
 components retain their original terms. The personal Apps catalog is owned by the separate
 `teren-in` repository and is optional for downloading and updating this app.
 
-GitHub Actions retains only the encrypted `SPARKLE_PRIVATE_KEY` secret. Publication
+GitHub Actions retains encrypted `SPARKLE_PRIVATE_KEY`, `AWAKE_SIGNING_P12` and
+`AWAKE_SIGNING_PASSWORD` secrets. The first authenticates update feeds/archives;
+the other two restore the persistent app code signing identity. Publication
 uses GitHub's short-lived token with repository contents, Pages and OIDC write
 permissions in the publish job only. Pull-request checks have no signing or
 publication secrets. No Yandex/S3 credentials are required.
@@ -63,7 +65,8 @@ the same verified artifact. A bad app or changed DMG requires a new version/buil
 
 ## Pipeline order and failure handling
 
-The macOS job validates configuration, tests, builds and ad hoc signs the app,
+The macOS job validates configuration, tests, imports the pinned release identity
+into an isolated temporary keychain, and builds/signs the app and all updater components. It
 verifies bundle metadata and arm64 executables, and packages an APFS DMG containing
 the app, Applications shortcut, LICENSE and THIRD_PARTY_NOTICES.md. It verifies the
 previous feed signature and increasing build, then signs and verifies the new archive and single-entry feed.
@@ -132,8 +135,11 @@ and build reuse rejection, exact-byte retry, and cleanup only after public
 verification. All Python publication code uses the standard library.
 
 Build/cache paths stay outside Documents. Overrides: `AWAKE_BUILD_DIR`,
-`AWAKE_OUTPUT_DIR`, `AWAKE_TOOLS_DIR`, and `AWAKE_SIGN_IDENTITY`
-(default `-`, ad hoc). `build-app.sh` replaces its generated app bundle.
+`AWAKE_OUTPUT_DIR`, `AWAKE_TOOLS_DIR`, `AWAKE_SIGN_KEYCHAIN`, and
+`AWAKE_REQUIRE_RELEASE_SIGNING`. Without a keychain the build is ad hoc for local
+development; packaging rejects it. Setting `AWAKE_REQUIRE_RELEASE_SIGNING=1`
+also makes a missing keychain stop the build. `build-app.sh` replaces only its
+generated bundle; do not copy an ad hoc build over the installed stable app.
 `scripts/sparkle-tools.sh` downloads pinned Sparkle 2.10.1 and checks its archive
 hash. Local signing uses the existing Keychain account; CI supplies the private
 key to Sparkle tools over stdin, never in command arguments, files or logs.
@@ -143,19 +149,47 @@ Never regenerate an existing app's key. Keep a protected backup outside source a
 build artifacts. Routine releases on another Mac need GitHub access, not copied
 publication credentials.
 
-## Installation and Developer ID
+## Persistent code signing and installation
+
+Released apps use a dedicated self-signed **Awake Release** certificate. Its public
+DER is `Resources/ReleaseSigning.cer`; `codeSigningCertificateSHA256` in
+`release.json` pins it. This is separate from the unchanged Sparkle update key.
+The default designated requirement binds each component's identifier to this
+certificate, rather than to the changing executable hash. Keep the exact
+certificate and private key for all subsequent releases. A newly generated
+certificate with the same name does not preserve identity.
+
+`scripts/signing.py` validates the public pin before signing. For non-PR builds,
+CI imports the encrypted PKCS#12 identity into a temporary keychain, permits
+`codesign` to use that key, and removes the keychain even when the job fails. The
+user keychain search list is restored after import and no certificate is added to
+system trust. PRs have no signing secrets and use ad hoc development builds.
+The encrypted identity and password also have an owner-only local backup outside
+source. Never print them, commit them or generate a replacement during a routine
+build. A new Mac can publish through the configured CI without copying credentials.
+
+Both the build and packaging gate verify the exact embedded certificate and the
+certificate-bound designated requirement for Awake and all Sparkle executables.
+An absent secret, changed public certificate, wrong component signer, ad hoc
+identity or identifier-only requirement stops publication. The finished DMG is
+mounted read-only and checked as well. Two different executable builds were
+installed consecutively with this certificate: the second retained cursor access,
+input detection and the idle sleep assertion without reopening setup.
 
 Open the DMG, drag the app to Applications or a writable per-user Applications
-folder, eject the image and launch the installed copy. Current builds are ad hoc
-signed and not notarized; first downloaded launch may require **System Settings →
-Privacy & Security → Open Anyway**. Sparkle defaults to four-hour checks while the
-app runs, with saved preferences respected; installation can wait for quit or
-permission. The running app displays its own bundle version.
+folder, eject the image and launch the installed copy. These builds are not
+Developer ID signed or notarized; first downloaded launch may require **System
+Settings → Privacy & Security → Open Anyway**. Users do not install or trust the
+signing certificate. Sparkle defaults to four-hour checks while the app runs, with
+saved preferences respected; installation can wait for quit or permission.
 
-Later, import the Developer ID identity into the CI signing keychain and set
-`AWAKE_SIGN_IDENTITY`. Notarize and staple after building and before DMG
-packaging/update signing. Preserve bundle ID, update key, URLs and increasing
-versions; test an update from an ad hoc release before publishing the transition.
+The transition from **0.2.5 and earlier** changes identity once. Existing users
+must remove Awake's old permission entry and add the installed copy once more.
+Subsequent releases using the pinned identity retain the grant. Keep bundle ID,
+certificate and Sparkle key unchanged. Never work around this by weakening the
+requirement to the bundle identifier alone. A later Developer ID migration needs
+an explicitly planned identity transition, signing/notarization checks and an
+update test; it must not silently replace this certificate.
 
 ## Runtime checks
 
@@ -175,15 +209,13 @@ key-event ages; no key codes or characters are read. Session lock detection also
 consults the optional WindowServer lock flag and otherwise uses workspace session
 and display notifications. The macOS sleep/lock policy remains in control.
 
-For local ad hoc builds, finish rebuilding before granting cursor-control access.
-The designated requirement is a code hash, so replacing the executable can leave
-an enabled-looking TCC entry that still rejects the new build. Confirm this in
-the app's actual launch context; a diagnostic executable started by an already
-trusted development tool can inherit that tool's access and give a misleading
-result. Remove only Awake's stale entry in the macOS permission UI and add the
-exact current app bundle again. This preserves unrelated permissions and updates
-the grant to the intended binary. Then verify the Awake-owned power assertion
-and real, Awake-tagged mouse motion after the selected idle interval.
+For local ad hoc development builds, finish rebuilding before granting access:
+their designated requirement remains bound to a changing code hash. Use the
+persistent keychain for local permission-continuity tests. Query `--status` in the
+running app's own context; a diagnostic process started by a trusted development
+tool can inherit that tool's access and report a misleading result. If an old
+ad hoc grant remains enabled-looking but unusable, remove only Awake's entry and
+add the exact installed bundle once. Never reset unrelated application grants.
 
 Permission setup uses a normal `NSWindowController` window with standard AppKit
 labels, push buttons, system spacing and intrinsic content sizing. It does not

@@ -1,0 +1,52 @@
+import hashlib
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import signing
+
+
+class SigningIdentityTests(unittest.TestCase):
+    def test_changed_certificate_cannot_silently_replace_the_release_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'Resources').mkdir()
+            (root / 'Resources/ReleaseSigning.cer').write_bytes(b'different identity')
+            (root / 'release.json').write_text(json.dumps({
+                'codeSigningCertificateSHA256': hashlib.sha256(b'approved identity').hexdigest()}))
+            with patch.object(signing, 'ROOT', root), self.assertRaisesRegex(ValueError, 'pinned'):
+                signing.certificate()
+
+    def test_content_hash_or_identifier_only_requirements_are_rejected(self):
+        der = signing.certificate()
+        for requirement in ['cdhash H"1234"', f'identifier "{signing.APP_ID}"',
+                            f'identifier "{signing.APP_ID}" or true']:
+            with self.assertRaises(ValueError):
+                signing.check_requirement('designated => ' + requirement, signing.APP_ID, der)
+
+    def test_a_different_certificate_or_bundle_identifier_is_rejected(self):
+        der = signing.certificate()
+        for identifier, cert in [('another.app', der), (signing.APP_ID, b'another certificate')]:
+            requirement = f'designated => identifier "{identifier}" and certificate root = H"{hashlib.sha1(cert).hexdigest()}"'
+            with self.assertRaises(ValueError):
+                signing.check_requirement(requirement, signing.APP_ID, der)
+
+    def test_release_build_cannot_fall_back_to_ad_hoc_without_a_keychain(self):
+        with patch.dict(signing.os.environ, {'AWAKE_REQUIRE_RELEASE_SIGNING': '1', 'AWAKE_SIGN_KEYCHAIN': ''}):
+            with patch.object(signing, 'run') as command, self.assertRaisesRegex(ValueError, 'required'):
+                signing.sign(Path('Awake.app'))
+            command.assert_not_called()
+
+    def test_missing_ci_secrets_cannot_create_a_keychain(self):
+        with patch.dict(signing.os.environ, {'AWAKE_SIGNING_P12': '', 'AWAKE_SIGNING_PASSWORD': ''}):
+            with patch.object(signing, 'run') as command, self.assertRaisesRegex(ValueError, 'secrets'):
+                signing.import_ci('unused.keychain-db')
+            command.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()

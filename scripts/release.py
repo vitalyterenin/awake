@@ -17,6 +17,7 @@ import urllib.request
 import uuid
 import xml.etree.ElementTree as ET
 from licenses import source_files, stage_distribution, verify_bundle, verify_distribution
+from signing import certificate, verify as verify_signing
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ACCOUNT = 'com.vitalyterenin.awake'
@@ -48,6 +49,7 @@ def config():
     if not set(data.get('legacyFeedURLs', [])).issubset(allowed_legacy):
         raise ValueError('Unexpected legacy updater URL')
     source_files()
+    certificate()
     return data
 
 
@@ -104,6 +106,7 @@ def create_disk_image(app, archive):
         run('hdiutil', 'attach', '-readonly', '-nobrowse', '-mountpoint', mount, archive)
         try:
             verify_distribution(mount, app.name)
+            verify_signing(pathlib.Path(mount) / app.name)
         finally:
             run('hdiutil', 'detach', mount)
 
@@ -124,6 +127,7 @@ def package(app, output, tools, previous):
         if plist.get(key) != expected:
             raise ValueError(f'Built app has unexpected {key}; rebuild it')
     verify_bundle(app)
+    verify_signing(app)
     run('codesign', '--verify', '--deep', '--strict', app)
     architectures = subprocess.check_output(
         ['lipo', '-archs', str(app / 'Contents/MacOS/Awake')], text=True).strip()
