@@ -13,6 +13,24 @@ import CoreGraphics
     #expect(motion.isReady(at: 612))
 }
 
+@Test func oneMinuteBoundaryAndDelayChangeReset() {
+    var motion = IdleMotion(now: 10, delay: .oneMinute)
+    #expect(!motion.isReady(at: 69.999))
+    #expect(motion.isReady(at: 70))
+    motion.begin(at: 70, pointer: CGPoint(x: 600, y: 400),
+                 display: CGRect(x: 0, y: 0, width: 1440, height: 900))
+    motion.setDelay(.fiveMinutes, at: 75)
+    #expect(motion.point(at: 75) == nil)
+    #expect(!motion.isReady(at: 374.999))
+    #expect(motion.isReady(at: 375))
+    motion.setDelay(.oneMinute, at: 80)
+    motion.activity(at: 100, marker: IdleMotion.eventMarker)
+    #expect(!motion.isReady(at: 139.999))
+    #expect(motion.isReady(at: 140))
+    #expect(MotionDelay.allCases.map(\.rawValue) == [1, 5])
+    #expect(MotionDelay(rawValue: 0) == nil)
+}
+
 @Test func smoothCircleAndImmediateInputStop() {
     var motion = IdleMotion(now: 0)
     let pointer = CGPoint(x: 600, y: 400)

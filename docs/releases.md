@@ -77,7 +77,8 @@ python3 -m venv .venv
 ## Runtime checks
 
 The built app accepts `--diagnostics` without starting the UI, input tap or motion.
-`--smoke-test` opens both native menus, verifies that every visible row fits their
+`--smoke-test` opens the main menu, motion-delay submenu and Updates submenu,
+verifies that every visible row fits their
 rendered frames, and exits without asking for permission or starting monitoring.
 `--preview-menu` opens the menu for manual visual inspection without monitoring.
 Never use live cursor movement tests without the user

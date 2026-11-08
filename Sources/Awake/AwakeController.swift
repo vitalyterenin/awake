@@ -9,7 +9,7 @@ final class AwakeController {
     private(set) var enabled: Bool
     private(set) var message = "Starting…"
     private(set) var moving = false
-    private var motion = IdleMotion(now: ProcessInfo.processInfo.systemUptime)
+    private var motion: IdleMotion
     private var eventTap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var heartbeat: Timer?
@@ -22,11 +22,21 @@ final class AwakeController {
     private let source = CGEventSource(stateID: .privateState)
 
     init() {
-        UserDefaults.standard.register(defaults: ["keepAwake": true])
+        UserDefaults.standard.register(defaults: ["keepAwake": true, "motionDelayMinutes": 5])
         enabled = UserDefaults.standard.bool(forKey: "keepAwake")
+        let delay = MotionDelay(rawValue: UserDefaults.standard.integer(forKey: "motionDelayMinutes")) ?? .fiveMinutes
+        motion = IdleMotion(now: ProcessInfo.processInfo.systemUptime, delay: delay)
     }
 
     var needsPermission: Bool { !AXIsProcessTrusted() }
+    var motionDelay: MotionDelay { motion.delay }
+
+    func setMotionDelay(_ delay: MotionDelay) {
+        UserDefaults.standard.set(delay.rawValue, forKey: "motionDelayMinutes")
+        motion.setDelay(delay, at: ProcessInfo.processInfo.systemUptime)
+        stopMotion()
+        tick()
+    }
 
     func start() {
         let center = NSWorkspace.shared.notificationCenter
@@ -209,7 +219,7 @@ final class AwakeController {
         }
         if moving { message = "Keeping awake · cursor moving" }
         else {
-            let remaining = max(0, Int(ceil(IdleMotion.delay - (now - motion.lastActivity))))
+            let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))
             message = String(format: "Keeping awake · motion in %d:%02d", remaining / 60, remaining % 60)
         }
     }

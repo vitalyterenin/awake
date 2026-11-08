@@ -1,6 +1,6 @@
 {
-  "version": "0.1.0",
-  "build": "1",
+  "version": "0.1.1",
+  "build": "2",
   "id": "awake",
   "feedURL": "https://teren.in/apps/feeds/awake.xml",
   "downloadURL": "https://teren.in/apps/Awake.dmg",
