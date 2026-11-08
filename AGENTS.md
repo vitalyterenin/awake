@@ -24,3 +24,7 @@ Use the `app-release` skill and its refreshed shared publishing guide.
 Keep app-specific release operations in `docs/releases.md`.
 Publish the current Awake.dmg through this repository's GitHub Releases and the
 signed appcast through its GitHub Pages deployment. Never add cloud storage keys.
+
+MIT is approved for this app. Preserve LICENSE and complete third-party notices
+in both the app bundle and DMG; use the build/package license checks before release.
+Do not change licensing or copyright notices by inference.
