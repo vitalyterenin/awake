@@ -3,17 +3,31 @@ import AppKit
 import IOKit.pwr_mgt
 import AwakeCore
 
+enum CursorControlState {
+    case permissionRequired, monitoringUnavailable, ready
+}
+
 @MainActor
 final class AwakeController {
     var didChange: (() -> Void)?
     private(set) var enabled: Bool
     private(set) var message = "Starting…"
     private(set) var moving = false
+    private(set) var dimWhileIdle: Bool
+    private(set) var allowOnBattery: Bool
     private var motion: IdleMotion
     private var eventTap: CFMachPort?
     private var tapSource: CFRunLoopSource?
     private var heartbeat: Timer?
-    private var animation: Timer?
+    private let animation = CursorAnimationClock()
+    private let power = PowerSourceMonitor()
+    private let dimming: IdleDimming
+    private var brightnessTimer: Timer?
+    private var supply: PowerSupply = .unknown
+    private var cursorAccessGranted = false
+    private var inputMonitoringFailed = false
+    private var lastRestoreAttempt: TimeInterval = -.infinity
+    private var motionFrames = 0
     private var assertion: IOPMAssertionID = 0
     private var suspended = false
     private var observers: [NSObjectProtocol] = []
@@ -22,14 +36,51 @@ final class AwakeController {
     private let source = CGEventSource(stateID: .privateState)
 
     init() {
-        UserDefaults.standard.register(defaults: ["keepAwake": true, "motionDelayMinutes": 5])
+        UserDefaults.standard.register(defaults: ["keepAwake": true, "motionDelayMinutes": 5,
+                                                 "dimWhileIdle": false, "allowOnBattery": false])
         enabled = UserDefaults.standard.bool(forKey: "keepAwake")
+        dimWhileIdle = UserDefaults.standard.bool(forKey: "dimWhileIdle")
+        allowOnBattery = UserDefaults.standard.bool(forKey: "allowOnBattery")
+        let saved = (UserDefaults.standard.dictionary(forKey: "pendingBrightnessRestore") ?? [:])
+            .compactMapValues { ($0 as? NSNumber)?.floatValue }
+        dimming = IdleDimming(backend: SystemBrightness(), savedLevels: saved) { levels in
+            if levels.isEmpty { UserDefaults.standard.removeObject(forKey: "pendingBrightnessRestore") }
+            else { UserDefaults.standard.set(levels, forKey: "pendingBrightnessRestore") }
+        }
         let delay = MotionDelay(rawValue: UserDefaults.standard.integer(forKey: "motionDelayMinutes")) ?? .fiveMinutes
         motion = IdleMotion(now: ProcessInfo.processInfo.systemUptime, delay: delay)
     }
 
     var needsPermission: Bool { !AXIsProcessTrusted() }
+    var cursorControlState: CursorControlState {
+        if needsPermission { return .permissionRequired }
+        return inputMonitoringFailed ? .monitoringUnavailable : .ready
+    }
+    func recheckCursorControl() { tick() }
     var motionDelay: MotionDelay { motion.delay }
+    var diagnostics: [String: Any] {
+        ["message": message, "enabled": enabled, "moving": moving,
+         "cursorAccess": !needsPermission, "delayMinutes": motion.delay.rawValue,
+         "inputMonitoringFailed": inputMonitoringFailed,
+         "dimWhileIdle": dimWhileIdle, "allowOnBattery": allowOnBattery,
+         "onBattery": supply == .battery, "powerSourceKnown": supply != .unknown,
+         "preventingIdleSleep": assertion != 0, "savedBrightnessDisplays": dimming.savedLevels.count,
+         "motionFrames": motionFrames, "brightnessTransition": dimming.transitionName]
+    }
+
+    func setDimWhileIdle(_ value: Bool) {
+        dimWhileIdle = value
+        UserDefaults.standard.set(value, forKey: "dimWhileIdle")
+        if !value { restoreBrightness(force: true) }
+        tick()
+    }
+
+    func setAllowOnBattery(_ value: Bool) {
+        allowOnBattery = value
+        UserDefaults.standard.set(value, forKey: "allowOnBattery")
+        input(at: ProcessInfo.processInfo.systemUptime)
+        tick()
+    }
 
     func setMotionDelay(_ delay: MotionDelay) {
         UserDefaults.standard.set(delay.rawValue, forKey: "motionDelayMinutes")
@@ -39,6 +90,11 @@ final class AwakeController {
     }
 
     func start() {
+        dimming.restore()
+        supply = power.current
+        power.didChange = { [weak self] in self?.tick() }
+        power.start()
+        animation.frame = { [weak self] in self?.animate() }
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification,
                      NSWorkspace.sessionDidResignActiveNotification] {
@@ -67,7 +123,6 @@ final class AwakeController {
         enabled = value
         UserDefaults.standard.set(value, forKey: "keepAwake")
         input(at: ProcessInfo.processInfo.systemUptime)
-        if value && needsPermission { requestPermission() }
         tick()
     }
 
@@ -85,6 +140,8 @@ final class AwakeController {
         stopMotion()
         releaseSleepAssertion()
         removeTap()
+        power.stop()
+        restoreBrightness(force: true, immediately: true)
         observers.forEach(NSWorkspace.shared.notificationCenter.removeObserver)
         observers.removeAll()
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
@@ -94,6 +151,7 @@ final class AwakeController {
     private func suspend() {
         suspended = true
         input(at: ProcessInfo.processInfo.systemUptime)
+        restoreBrightness(force: true, immediately: true)
         releaseSleepAssertion()
         tick()
     }
@@ -171,15 +229,29 @@ final class AwakeController {
 
     private func tick() {
         defer { didChange?() }
+        // Notifications provide immediate updates; polling also covers an unavailable source.
+        let currentSupply = power.current
+        if currentSupply != supply {
+            supply = currentSupply
+            input(at: ProcessInfo.processInfo.systemUptime)
+        }
         guard enabled else {
             stopMotion(); removeTap(); releaseSleepAssertion()
             message = "Off · normal sleep behavior"
             return
         }
-        guard !needsPermission else {
+        guard supply.permitsAwake(allowBattery: allowOnBattery) else {
+            input(at: ProcessInfo.processInfo.systemUptime)
+            removeTap(); releaseSleepAssertion()
+            message = supply == .battery ? "Paused · on battery power" : "Paused · power source unavailable"
+            return
+        }
+        cursorAccessGranted = !needsPermission
+        guard cursorAccessGranted else {
+            inputMonitoringFailed = false
             stopMotion(); removeTap(); releaseSleepAssertion()
             motion.activity(at: ProcessInfo.processInfo.systemUptime)
-            message = "Accessibility permission required"
+            message = "Not working · cursor control permission required"
             return
         }
         guard sessionIsUsable else {
@@ -189,11 +261,13 @@ final class AwakeController {
             return
         }
         guard installTap() else {
+            inputMonitoringFailed = true
             input(at: ProcessInfo.processInfo.systemUptime)
             releaseSleepAssertion()
-            message = "Input access unavailable · reopen Awake"
+            message = "Not working · input detection unavailable"
             return
         }
+        inputMonitoringFailed = false
         guard holdSleepAssertion() else {
             stopMotion()
             message = "Could not prevent sleep · try again"
@@ -208,17 +282,23 @@ final class AwakeController {
             input(at: now - keyIdle)
         }
         if motion.isReady(at: now), !moving, !buttonsAreDown,
-           let point = CGEvent(source: nil)?.location, let display = displayBounds(at: point) {
-            motion.begin(at: now, pointer: point, display: display)
+           let point = CGEvent(source: nil)?.location, let display = display(at: point) {
+            motion.begin(at: now, pointer: point, display: display.bounds)
             lastPostedPoint = point
             moving = true
-            animation = Timer(timeInterval: 1 / 30, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.animate() }
-            }
-            RunLoop.main.add(animation!, forMode: .common)
+            animation.start(on: display.id)
         }
-        if moving { message = "Keeping awake · cursor moving" }
+        if moving {
+            if dimWhileIdle {
+                let success = dimming.fadeDown(at: now)
+                updateBrightnessClock()
+                message = success
+                    ? (dimming.isAnimating ? "Keeping awake · dimming screen" : "Keeping awake · screen dimmed")
+                    : "Cursor moving · brightness unavailable"
+            } else { message = "Keeping awake · cursor moving" }
+        }
         else {
+            restoreBrightness()
             let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))
             message = String(format: "Keeping awake · motion in %d:%02d", remaining / 60, remaining % 60)
         }
@@ -228,39 +308,67 @@ final class AwakeController {
         (0...31).contains { CGEventSource.buttonState(.combinedSessionState, button: CGMouseButton(rawValue: UInt32($0))!) }
     }
 
-    private func displayBounds(at point: CGPoint) -> CGRect? {
+    private func display(at point: CGPoint) -> (id: CGDirectDisplayID, bounds: CGRect)? {
         var display: CGDirectDisplayID = 0
         var count: UInt32 = 0
         guard CGGetDisplaysWithPoint(point, 1, &display, &count) == .success, count == 1 else { return nil }
-        return CGDisplayBounds(display)
+        return (display, CGDisplayBounds(display))
     }
 
     private func animate() {
-        guard enabled, sessionIsUsable, !needsPermission, !buttonsAreDown,
+        guard enabled, !suspended, cursorAccessGranted, supply.permitsAwake(allowBattery: allowOnBattery),
               let eventTap, CGEvent.tapIsEnabled(tap: eventTap),
               let current = CGEvent(source: nil)?.location,
               let lastPostedPoint, hypot(current.x - lastPostedPoint.x, current.y - lastPostedPoint.y) < 1,
-              let point = motion.point(at: ProcessInfo.processInfo.systemUptime),
-              let display = displayBounds(at: current), let source else {
+              let point = motion.point(at: ProcessInfo.processInfo.systemUptime), let source else {
             input(at: ProcessInfo.processInfo.systemUptime)
             return
         }
-        let clamped = CGPoint(x: min(max(point.x, display.minX), display.maxX - 1),
-                              y: min(max(point.y, display.minY), display.maxY - 1))
         guard let event = CGEvent(mouseEventSource: source, mouseType: .mouseMoved,
-                                  mouseCursorPosition: clamped, mouseButton: .left) else {
+                                  mouseCursorPosition: point, mouseButton: .left) else {
             input(at: ProcessInfo.processInfo.systemUptime)
             return
         }
         event.setIntegerValueField(.eventSourceUserData, value: IdleMotion.eventMarker)
         event.post(tap: .cgSessionEventTap)
-        self.lastPostedPoint = clamped
+        motionFrames += 1
+        self.lastPostedPoint = point
     }
 
     private func stopMotion() {
-        animation?.invalidate()
-        animation = nil
+        let wasMoving = moving
+        animation.stop()
         moving = false
         lastPostedPoint = nil
+        restoreBrightness(force: wasMoving)
+    }
+
+    private func restoreBrightness(force: Bool = false, immediately: Bool = false) {
+        guard !dimming.savedLevels.isEmpty else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard force || now - lastRestoreAttempt >= 1 else { return }
+        lastRestoreAttempt = now
+        if immediately { dimming.restore() }
+        else { dimming.fadeUp(at: now) }
+        updateBrightnessClock()
+    }
+
+    private func updateBrightnessClock() {
+        if dimming.isAnimating {
+            guard brightnessTimer == nil else { return }
+            let timer = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.dimming.advance(to: ProcessInfo.processInfo.systemUptime)
+                    self.updateBrightnessClock()
+                }
+            }
+            timer.tolerance = 0.001
+            RunLoop.main.add(timer, forMode: .common)
+            brightnessTimer = timer
+        } else {
+            brightnessTimer?.invalidate()
+            brightnessTimer = nil
+        }
     }
 }

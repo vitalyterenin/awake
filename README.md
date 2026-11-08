@@ -1,66 +1,97 @@
 # Awake
 
-A small macOS menu bar app that keeps your Mac awake. After one or five minutes
-without mouse or keyboard activity, the cursor slowly moves in a small circle. Move the
-mouse, scroll, click or type and movement stops immediately.
+Awake keeps your Mac awake from the macOS menu bar. After one or five minutes
+without activity, the cursor moves in a small circle. Move the mouse, scroll,
+click or type to stop the motion and restart the countdown.
 
 **Apple Silicon only · macOS 13 or later**
 
-## Install and update
+## Install
 
-Download **[Awake.dmg](https://teren.in/apps/Awake.dmg)**, drag Awake to Applications,
-eject the image, then open the installed app. The initial build is ad hoc signed
-and is not notarized. If macOS blocks its first launch, approve the installed app
-with **System Settings → Privacy & Security → Open Anyway**.
+1. Download [Awake.dmg](https://teren.in/apps/Awake.dmg), drag Awake to
+   Applications, eject the disk image, and open the installed app.
+2. The app is ad hoc signed and is not notarized. If macOS blocks its first launch,
+   use **System Settings → Privacy & Security → Open Anyway**.
+3. Allow Awake in **Privacy & Security → Accessibility**, called **Device Control
+   and Data Access** on newer macOS versions. The setup dialog links to this pane.
 
-Allow Awake in **System Settings → Privacy & Security → Accessibility**. Until
-permission is granted, Awake shows a permission reminder and does not prevent sleep
-or move the cursor. **Allow Accessibility…** in its menu opens the relevant settings.
+Until cursor control is allowed, Awake does not prevent sleep or move the cursor.
+The setup dialog opens on each launch with missing permission. A warning triangle
+and the name **Awake** replace the coffee cup in the menu bar; closing the dialog
+leaves the warning visible. **Finish Setup…** reopens it. The dialog updates
+automatically after access is granted. **Permissions…** opens it when access is ready.
 
-Signed Sparkle updates use a permanent feed and download URL. Scheduled checks and
-automatic installation are enabled by default, with checks every four hours while
-Awake runs. The **Updates** submenu offers **Check for Updates…**, **Check
-automatically**, and **Install automatically**. Installation may wait for quit or
-permission. These preferences persist between launches.
-
-To remove Awake, choose **Quit Awake** and move the app from Applications to Trash.
+If the switch is on but Awake is still blocked after an update, macOS may have
+kept permission for the previous copy. Remove only Awake from that list with
+**−**, then add the installed `Awake.app` with **+**. The setup dialog's standard
+help button explains this recovery. Input detection failures have a separate
+paused message and recovery instructions; no additional permission is requested.
 
 ## Use
 
-The sun icon in the menu bar has an on/off switch: **Keep Mac awake**. It defaults
-to on and remembers your choice between launches. **Start cursor motion after**
-lets you choose **1 minute** or **5 minutes** (the default). The delay also persists
-between launches. Changing it stops any current motion and starts a fresh countdown.
-The menu shows the current state and the countdown until cursor movement.
+Open the coffee cup in the menu bar:
 
-The nominal circle radius is six points and each
-turn takes 24 seconds. Near screen edges the path is adjusted and clipped to stay
-on the current display, without an initial jump. Move, scroll, click or type to
-stop movement and restart the countdown. Awake does not click, drag or type.
+| Control | Behavior and default |
+| --- | --- |
+| **Keep Mac awake** | On/off switch, on by default. Requires cursor control and an allowed power source. |
+| **Start cursor motion after** | Choose **1 minute** or **5 minutes**; default 5. Changing it starts a fresh countdown. |
+| **Dim display while idle** | Off by default. Dim supported displays when cursor motion starts. |
+| **Allow on battery power** | Off by default. Enable to keep Awake running on battery. |
 
-While enabled with Accessibility permission and working input monitoring, a macOS
-power assertion prevents idle display and system sleep, including during the
-idle countdown. Choosing Sleep, closing the lid or a low battery can still
-put the Mac to sleep. Awake pauses during inactive/locked sessions and starts a
-fresh countdown on return. It does not disable macOS screen locking.
+These choices persist between launches. The menu shows whether Awake is keeping
+the Mac awake, counting down, moving the cursor or paused. All interface controls,
+menus, setup/help dialogs and About panel use standard AppKit components and system
+styling.
 
-Turning it off or quitting releases the assertion and restores normal idle sleep.
-Awake does not change your sleep settings or start at login. If permission is
-revoked or monitoring fails, it pauses and shows the problem in the menu. Restore
-Accessibility permission or reopen Awake to retry.
+Cursor motion follows the display refresh rate on macOS 14+, with a 60 Hz fallback
+on macOS 13. The circle has a fixed 12-point radius and takes four seconds per turn.
+At display edges the cursor eases into a full circle within that display. Awake
+does not click, drag or type.
 
-## Privacy and help
+With **Dim display while idle**, the native system brightness slider lowers to
+1/16 (about 6%) over five seconds. Input restores the captured level over half a
+second, including if dimming was still in progress. Both directions use an eased
+cubic Bézier curve. An already darker display stays unchanged. This option works
+only with displays supporting native brightness control; it does not use an overlay.
+Turning the option or Awake off, pausing, or quitting restores brightness as well.
+Normal quit and session suspension restore immediately. If forced termination
+interrupts dimming, the next launch recovers saved levels. A disconnected display
+keeps its recovery value until it can be restored.
 
-There is no telemetry. Awake never records input, reads typed characters, or
-transmits mouse/keyboard activity. Input events are observed only to reset the
-in-memory countdown and are returned unchanged. Network requests are limited to
-Sparkle update checks/downloads from `teren.in`; system profiling is disabled.
+With battery use disabled, Awake pauses on battery, restores brightness and allows
+normal idle sleep. Connecting power starts a fresh countdown. Unknown power sources
+also pause the app.
 
-Maintained by [Vitaly Terenin](https://teren.in/). Source access holders can report
-problems in the [private repository's issues](https://github.com/vitalyterenin/awake/issues).
+While enabled with permission, working activity detection and an allowed power
+source, Awake prevents idle display and system sleep, including during the countdown.
+Choosing Sleep, closing the lid or a low battery can still put the Mac to sleep.
+Awake pauses during locked or inactive sessions and restarts the countdown on return.
+It does not change sleep settings, disable screen locking or start at login.
+
+## Updates and removal
+
+The **Updates** submenu contains **Check for Updates…**, **Check automatically**
+and **Install automatically**. Automatic checks and installation default to on,
+with checks every four hours while Awake runs. Saved preferences are respected;
+installation can wait for quit or permission. Both the update feed and downloaded
+DMG are authenticated with Sparkle signatures before installation.
+
+To remove Awake, choose **Quit Awake**, then move it from Applications to Trash.
+Quitting restores brightness and normal idle sleep behavior.
+
+## Privacy and support
+
+Awake has no telemetry and never records input or reads typed characters. Activity
+is used only to reset the in-memory countdown; events are returned unchanged.
+Network requests are limited to Sparkle updates from `teren.in`; system profiling
+is disabled.
+
+Maintained by [Vitaly Terenin](https://teren.in/). Contact the maintainer through
+that page. Source access holders can also report problems in the
+[repository's issues](https://github.com/vitalyterenin/awake/issues).
 The source repository is private; no open-source license has been assigned.
 
-## Build
+## Build and release
 
 From the repository root on an Apple Silicon Mac with Swift 6+ and Command Line Tools:
 
@@ -70,4 +101,5 @@ bash scripts/build-app.sh
 ```
 
 Output: `~/Library/Developer/Awake/Awake.app`.
-See [release operations](docs/releases.md) for signing, CI and publication.
+See [release operations](docs/releases.md) for runtime checks, publication tests,
+signing and the CI release process.

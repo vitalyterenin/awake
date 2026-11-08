@@ -37,7 +37,7 @@ import CoreGraphics
     motion.begin(at: 300, pointer: pointer, display: CGRect(x: 0, y: 0, width: 1440, height: 900))
     #expect(abs(motion.point(at: 300)!.x - pointer.x) < 0.0001)
     #expect(abs(motion.point(at: 300)!.y - pointer.y) < 0.0001)
-    #expect(abs(motion.point(at: 324)!.x - pointer.x) < 0.0001)
+    #expect(abs(motion.point(at: 300 + IdleMotion.period)!.x - pointer.x) < 0.0001)
     #expect(hypot(motion.point(at: 300.033)!.x - pointer.x,
                   motion.point(at: 300.033)!.y - pointer.y) < 0.1)
     motion.activity(at: 305)
@@ -57,8 +57,19 @@ import CoreGraphics
             for i in 0...720 {
                 let point = motion.point(at: 300 + Double(i) / 30)!
                 #expect(display.contains(point))
-                #expect(hypot(point.x - p.x, point.y - p.y) <= 22)
+                #expect(hypot(point.x - p.x, point.y - p.y) <= 35)
             }
         }
+    }
+}
+
+@Test func completeCircleAtCornerWithoutFlatClippedSegments() {
+    var motion = IdleMotion(now: 0)
+    motion.begin(at: 60, pointer: .zero, display: CGRect(x: 0, y: 0, width: 1440, height: 900))
+    let start = 60 + IdleMotion.entranceDuration
+    let points = (0..<240).map { motion.point(at: start + Double($0) * IdleMotion.period / 240)! }
+    for i in 1..<points.count {
+        let step = hypot(points[i].x - points[i-1].x, points[i].y - points[i-1].y)
+        #expect(step > 0.3 && step < 0.32)
     }
 }
