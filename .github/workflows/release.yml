@@ -1,0 +1,85 @@
+name: Release Awake
+
+on:
+  pull_request:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: awake-stable-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Validate release identity and tag
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python3 scripts/release.py validate
+      - name: Test publication safety
+        run: |
+          python3 -m venv "$RUNNER_TEMP/publication-tests"
+          "$RUNNER_TEMP/publication-tests/bin/python" -m pip install 'boto3==1.42.97'
+          "$RUNNER_TEMP/publication-tests/bin/python" -m unittest discover -s Tests -p 'test_*.py'
+      - name: Test idle behavior and geometry
+        run: bash scripts/test.sh
+      - name: Build for Apple Silicon
+        env:
+          AWAKE_OUTPUT_DIR: ${{ runner.temp }}/Awake
+        run: bash scripts/build-app.sh
+      - name: Check built app
+        run: |
+          "$RUNNER_TEMP/Awake/Awake.app/Contents/MacOS/Awake" --diagnostics
+          "$RUNNER_TEMP/Awake/Awake.app/Contents/MacOS/Awake" --smoke-test
+      - name: Prepare signed DMG and feed
+        if: github.event_name != 'pull_request'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          tools="$(bash scripts/sparkle-tools.sh)"
+          python3 scripts/release.py previous "$RUNNER_TEMP/previous.xml"
+          previous_args=()
+          if [[ -f "$RUNNER_TEMP/previous.xml" ]]; then previous_args+=(--previous "$RUNNER_TEMP/previous.xml"); fi
+          python3 scripts/release.py package \
+            --app "$RUNNER_TEMP/Awake/Awake.app" --output "$RUNNER_TEMP/release" \
+            --tools "$tools" "${previous_args[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: awake-release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: awake-release
+          path: release
+      - name: Install S3 client
+        run: python3 -m pip install 'boto3==1.42.97'
+      - name: Publish archive, then signed feed
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+        run: |
+          test -n "$AWS_ACCESS_KEY_ID" && test -n "$AWS_SECRET_ACCESS_KEY"
+          python3 scripts/publish.py release

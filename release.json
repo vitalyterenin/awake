@@ -1,0 +1,8 @@
+{
+  "version": "0.1.0",
+  "build": "1",
+  "id": "awake",
+  "feedURL": "https://teren.in/apps/feeds/awake.xml",
+  "downloadURL": "https://teren.in/apps/Awake.dmg",
+  "publicEDKey": "t3cMZEYumH7YinrOKAQg9Za9NXRqVgsgH5DR28Cm7qM="
+}
