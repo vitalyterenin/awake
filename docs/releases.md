@@ -47,6 +47,11 @@ change cloud access.
 6. Wait for both **build** and **publish** jobs in **Release Awake**.
 7. Verify the publicly served feed/DMG, both Ed25519 signatures, length,
    arm64 requirement and version/build. A source commit is not a release.
+8. Review the [Apps catalog card](https://teren.in/apps/) using the shared
+   [catalog workflow](https://github.com/vitalyterenin/app-release-kit/blob/main/skills/app-release/references/catalog.md).
+   Create a missing card or update changed facts through the separate website
+   repository, then verify the live page and download. Leave an accurate card
+   unchanged; app publisher credentials must not gain website access.
 
 PR checks have no secrets. Ordinary main pushes do not publish. The matching tag
 builds and ad hoc signs the app, creates/verifies an APFS DMG with Applications
