@@ -1,10 +1,105 @@
 # Awake refactoring review
 
-This is the historical audit and implementation record preceding release 0.2.8.
-Release publication and its checks are tracked separately in the release PR;
-current operating instructions are in [release operations](releases.md).
+This document records the audit of 0.2.8 and its follow-up fixes. It also preserves
+the earlier audit and implementation that led to 0.2.8. See [architecture](architecture.md)
+for the current system and [release operations](releases.md) for procedures.
 
-## Scope and result
+## 2026-11-10 audit of 0.2.8
+
+Baseline: clean `main` at `3868ada946379293e0a25982da469e0b7e2549fd`,
+version 0.2.8, build 11. This audit changed only documentation. It focused on
+runtime and platform boundaries, Swift scenarios, packaging and publication
+order, Python publication fixtures, SwiftPM pins, and the workflow. AppKit
+presentation was smoke-tested. Dependency internals and artwork were outside scope.
+
+Keep the current core/runtime/AppKit split, Sparkle, and the GitHub-only release
+path. The two issues below can be fixed through existing boundaries; they do not
+justify a rewrite or dependency upgrade. No performance improvement is claimed.
+
+### A1 — Brightness restoration can stop retrying while the cursor moves
+
+**P2, reproduced.** [The controller](../Sources/AwakeRuntime/AwakeController.swift#L69)
+requests a forced restore when the dimming option is turned off. A failed write
+ends that display's transition while retaining its journal entry, as intended.
+But the [moving branch with dimming off](../Sources/AwakeRuntime/AwakeController.swift#L205)
+only sets the menu message. It skips the throttled restore that runs while the
+cursor is stationary. A temporary failure can leave the display dim until
+further input, a pause or quit, even after writes work again.
+
+**Evidence:** An isolated Swift Testing scenario used the actual controller, a
+manual clock and a fake display. It dimmed from `0.8125` to `0.0625`, turned
+dimming off, rejected the first restoration write, then allowed writes again.
+Three subsequent heartbeat ticks and brightness-frame opportunities left the
+display at `0.0625` and its journal at `0.8125` while the menu said
+`Moving cursor`. The next real-input callback in the fixture started recovery.
+Calling the existing throttled restore in the moving branch with dimming off
+made the same probe pass in a temporary copy, with cursor motion still active.
+
+**Implemented and verified locally.** The controller calls the throttled restore
+on heartbeat ticks during motion when dimming is off. The regression test rejects
+the first restore write, checks the one-second retry interval and verifies that
+the journal clears only after the fade completes. The cursor still posts a motion
+frame after restoration.
+
+### A2 — The first public DMG read can strand the signed feed on the previous release
+
+**P2, reproduced.** In the baseline, [`publish()`](../scripts/publish.py#L91) makes the GitHub
+release public and latest before reading the public DMG URL. One stale response
+or temporary HTTP failure stops the job before staging Pages. The bounded retry
+in `verify()` runs only after Pages deploys. The
+previous appcast points to GitHub's mutable latest download, so it can ask
+Sparkle for bytes that no longer match its signature. Sparkle rejects that
+archive; the issue affects update availability. Older assets remain intact.
+See [GitHub's latest download URL](https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases)
+and [Sparkle's update verification](https://sparkle-project.org/documentation/publishing/).
+
+**Evidence:** Two isolated runs used the existing publication fixture and a fake
+GitHub client. One returned stale archive bytes and one HTTP 503 on the first
+public DMG read. Both would return the expected bytes on the second read. In
+each case the current code had already marked the release public and latest,
+made only one archive read, and produced no staged `pages/appcast.xml`.
+
+**Implemented and verified locally.** The publisher shares the public read retry
+loop with final verification. The check before staging Pages allows up to six
+attempts within 30 seconds and requires exact archive bytes. The final check
+retains its 180-second acceptance budget. Together with the [pinned Pages action's
+10-minute deployment timeout](https://raw.githubusercontent.com/actions/deploy-pages/d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e/action.yml),
+these budgets total 13 minutes and 30 seconds inside the 15-minute job limit.
+Other job steps share the remaining time. Fake-clock tests cover stale bytes,
+HTTP 503, attempt exhaustion, a matching response after the deadline and HTTP 403.
+They verify one publication sequence and Pages staging only after a timely match.
+
+This reduces failures due to short-lived CDN problems. GitHub Releases and
+Pages still switch separately. A version-specific enclosure using the
+[release asset's download URL](https://docs.github.com/en/rest/releases/assets)
+could tie a signed feed to one archive. Cached feeds would still need their
+corresponding assets, so defer that alternative until there is a decision on
+how long previous DMGs should be kept and how to transition the current feed.
+
+### Audit verification
+
+On Apple Silicon macOS 26.7.2 (25G332), Swift 6.4.2 and Python 3.9.6,
+`bash scripts/test.sh` passed release metadata validation, all 33 Swift tests
+and all 37 Python tests. `bash scripts/build-app.sh` passed with an isolated
+output directory. The ad hoc app passed strict signature verification,
+`--diagnostics`, and `--smoke-test` for menu geometry and native setup dismissal
+in Aqua and dark Aqua. The brightness probe failed on the baseline and passed
+with the candidate change in the temporary copy. The Python probes reproduced
+the publication failure without calling GitHub or Pages. These probes were
+not added to the project test suite.
+
+### Follow-up verification
+
+The new Swift regression test and the Python cases for stale bytes, exhaustion
+and a late response failed before the fixes. After the fixes,
+`bash scripts/test.sh` passed 34 Swift tests and 41 Python tests.
+`bash scripts/build-app.sh` passed with an isolated output directory. The arm64
+development app passed strict signature verification, `--diagnostics` and the
+AppKit `--smoke-test`. The regression tests simulated display writes and GitHub
+publication. Physical display recovery and a live signed update remain
+unverified.
+
+## Historical scope and result before 0.2.8
 
 Initially reviewed on 2026-11-08 in audit mode following the `deep-refactor` skill.
 The user subsequently authorized implementation of the staged plan. The findings

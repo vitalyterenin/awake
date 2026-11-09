@@ -207,7 +207,10 @@ package final class AwakeController {
                 dimming.fadeDown(at: now)
                 updateBrightnessClock()
                 updateDimmingMessage()
-            } else { message = "Moving cursor" }
+            } else {
+                restoreBrightness()
+                message = "Moving cursor"
+            }
         } else {
             restoreBrightness()
             let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))

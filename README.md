@@ -79,11 +79,13 @@ It does not change sleep settings, disable screen locking or start at login.
 
 ## Updates and removal
 
-The **Updates** submenu contains **Check for Updates…**, **Check automatically**
-and **Install automatically**. Automatic checks and installation default to on,
-with checks every four hours while Awake runs. Saved preferences are respected;
-installation can wait for quit or permission. Both the update feed and downloaded
-DMG are authenticated with Sparkle signatures before installation.
+The **Updates** submenu shows the running version and offers **Check for Updates…**,
+**Automatically Check for Updates**, and **Automatically Install Updates**.
+Automatic checks and installation default to on, with checks every four hours
+while Awake runs. Turning off automatic checks keeps manual checks available and
+pauses automatic installation until checks are enabled again. Sparkle keeps the
+saved installation preference and verifies both the feed and downloaded DMG
+before installing. Installation can wait for quit or permission.
 
 To remove Awake, choose **Quit Awake**, then move it from Applications to Trash.
 Quitting restores brightness and normal idle sleep behavior.

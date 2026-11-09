@@ -1,8 +1,8 @@
 # Awake architecture
 
-This document describes the refactoring based on `68097a28b7494bdc4015097eefb99885642fcc9c`.
-Baseline findings, implementation results and verification limits are recorded in
-[the refactoring review](refactoring-review.md). Product usage is in the
+This document describes the current source. The 0.2.8 audit baseline and
+follow-up changes are recorded in [the refactoring review](refactoring-review.md).
+Product usage is in the
 [README](../README.md); publication procedures belong in [release operations](releases.md).
 
 ## Product boundary
@@ -114,6 +114,9 @@ while a transition exists. Failed display writes remove that display from the ac
 retain its recovery entry. Ordinary restore attempts are throttled to once per
 second; forced attempts bypass that throttle. `restore()` cancels animation and
 attempts the original levels immediately, for startup, suspension and quit.
+Turning off dimming starts a restore without stopping cursor motion. Heartbeat
+ticks continue retrying pending restoration while dimming is off, including
+during motion.
 `IdleDimming.status` distinguishes dimming, dimmed, unavailable and partial failure.
 Failed display writes remain reflected in status across retry scheduling. An actual
 successful write, or a later read already at/below the target tolerance, clears that
@@ -134,6 +137,10 @@ outcome changes without refreshing the menu on every brightness frame.
 
 Sparkle owns its saved update preferences. Bundle defaults enable automatic checks
 and installation, with a four-hour check interval and profiling disabled.
+The **Updates** submenu reads Sparkle's current state when opened. Automatic
+installation is unavailable while automatic checks are off, and Sparkle retains
+the saved choice. Manual checks depend on updater readiness. The read-only
+version row displays the running bundle's marketing version.
 
 `--status` sends a UUID-tagged distributed notification and waits up to two seconds
 for JSON from an already running app. It reports that process's permission,
@@ -185,6 +192,9 @@ The Linux publisher relies on signature verification performed by the macOS
 packaging job and on transfer of that job's artifact. Its SHA-256 manifest checks
 byte consistency; they are not an independent cryptographic signature trust root.
 GitHub Releases hosts the DMG; GitHub Pages hosts the single-entry signed appcast.
+The appcast points to the latest-release download URL. The publisher uses the
+same bounded read policy to check the DMG before staging Pages and to check both
+public objects after deployment. Both checks require exact artifact bytes.
 For recovery, identity continuity and publication restrictions, use the release guide.
 
 ## Resource costs and design tradeoffs

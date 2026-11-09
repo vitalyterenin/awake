@@ -88,8 +88,9 @@ def load(directory):
     return data, state, feed, archive
 
 
-def publish(directory, client=None, fetch=public_bytes):
+def publish(directory, client=None, fetch=None):
     data, state, feed, archive = load(directory)
+    read = public_bytes if fetch is None else fetch
     repository = data['githubRepository']
     if os.environ.get('GITHUB_REPOSITORY', repository) != repository:
         raise ValueError('Publication is restricted to its own repository')
@@ -115,7 +116,7 @@ def publish(directory, client=None, fetch=public_bytes):
     previous_url = state['sourceURL']
     if previous_url != data['feedURL']:
         raise ValueError('Unexpected previous feed source')
-    current = fetch(previous_url)
+    current = read(previous_url)
     current_hash = hashlib.sha256(current).hexdigest() if current is not None else None
     if current != feed and current_hash != state['previousFeedSHA256']:
         raise ValueError('The feed changed before publication')
@@ -127,7 +128,7 @@ def publish(directory, client=None, fetch=public_bytes):
     if release and not release['draft']:
         # Retry only with the exact already-published archive; never replace its bytes.
         asset = next((a for a in release['assets'] if a['name'] == ARCHIVE_NAME), None)
-        if asset is None or fetch(asset['browser_download_url']) != archive:
+        if asset is None or read(asset['browser_download_url']) != archive:
             raise ValueError('This release already exists with different archive bytes')
         client.request('/releases/' + str(release['id']), 'PATCH', {'make_latest': 'true'})
     else:
@@ -141,8 +142,10 @@ def publish(directory, client=None, fetch=public_bytes):
                 client.request('/releases/assets/' + str(asset['id']), 'DELETE')
         client.upload(release['id'], ARCHIVE_NAME, archive)
         client.request('/releases/' + str(release['id']), 'PATCH', {'draft': False, 'make_latest': 'true'})
-    if fetch(data['downloadURL']) != archive:
-        raise ValueError('Public download differs from the verified archive')
+    wait_for_public_bytes(
+        [(data['downloadURL'], archive)], 'Public download did not converge; Pages was not staged',
+        fetch=fetch, attempts=6, sleep=time.sleep, timeout=30, clock=time.monotonic,
+    )
     pages = pathlib.Path(directory) / 'pages'
     pages.mkdir(exist_ok=True)
     (pages / 'appcast.xml').write_bytes(feed)
@@ -163,13 +166,10 @@ def transient_fetch_error(error):
             (errno.ETIMEDOUT, errno.ENETUNREACH, errno.EHOSTUNREACH))
 
 
-def verify(directory, client=None, fetch=None, attempts=24, sleep=time.sleep,
-           timeout=180, clock=time.monotonic):
+def wait_for_public_bytes(expected, failure, *, fetch, attempts, sleep, timeout, clock):
     if attempts < 1 or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('Verification requires positive attempt and time budgets')
-    data, _, feed, archive = load(directory)
     deadline = clock() + timeout
-    failure = 'Public feed/download did not converge; older downloads were preserved'
 
     def read(url):
         remaining = deadline - clock()
@@ -181,19 +181,30 @@ def verify(directory, client=None, fetch=None, attempts=24, sleep=time.sleep,
 
     for attempt in range(attempts):
         if clock() >= deadline:
-            raise ValueError(failure)
+            break
         try:
-            matches = read(data['feedURL']) == feed and read(data['downloadURL']) == archive
+            matches = all(read(url) == body for url, body in expected)
         except (OSError, http.client.HTTPException) as error:
             if not transient_fetch_error(error):
                 raise
             matches = False
         remaining = deadline - clock()
         if matches and remaining > 0:
-            break
+            return
         if attempt + 1 == attempts or remaining <= 0:
-            raise ValueError(failure)
+            break
         sleep(min(5, remaining))
+    raise ValueError(failure)
+
+
+def verify(directory, client=None, fetch=None, attempts=24, sleep=time.sleep,
+           timeout=180, clock=time.monotonic):
+    data, _, feed, archive = load(directory)
+    wait_for_public_bytes(
+        [(data['feedURL'], feed), (data['downloadURL'], archive)],
+        'Public feed/download did not converge; older downloads were preserved',
+        fetch=fetch, attempts=attempts, sleep=sleep, timeout=timeout, clock=clock,
+    )
     client = client or GitHub(data['githubRepository'])
     tag = 'v' + data['version']
     latest = client.request('/releases/latest')
