@@ -84,15 +84,15 @@ workflow serializes releases rather than cancelling an in-flight publisher.
 
 GitHub controls CDN caching. A cached older feed can briefly disagree with the
 current DMG; Sparkle rejects the mismatch and a fresh check can retry. Never disable
-signature checks to mask caching or deployment failures. Bounded verification waits
-for Pages propagation and fails if the public objects do not converge. Final public
-verification allows up to 24 attempts within a 180-second acceptance budget, with
-five-second waits capped by the remaining budget. It retries byte mismatch/404,
+signature checks to mask caching or deployment failures. The public DMG read
+before Pages staging allows up to six attempts within 30 seconds. Final public
+verification allows up to 24 attempts within 180 seconds. Both checks use
+five-second waits capped by the remaining budget and retry byte mismatch/404,
 temporary DNS failure, connection failure, timeout, incomplete responses and HTTP
 408, 429, 500, 502, 503 or 504. Other failures, including certificate validation and
 permanent HTTP errors, stop immediately. Each network read uses at most the
-remaining budget (capped at 60 seconds); a response arriving after the deadline
-cannot authorize cleanup. Socket timeouts do not strictly cap the total duration
+remaining budget (capped at 60 seconds). A response arriving after the deadline
+cannot authorize Pages staging or cleanup. Socket timeouts do not strictly cap the total duration
 of a slowly streamed response. GitHub mutations are not automatically retried.
 
 The previous signed feed is read only from this repository's GitHub Pages URL.
@@ -203,7 +203,8 @@ update test; it must not silently replace this certificate.
 
 The built app accepts `--diagnostics` without starting the UI, input tap or motion.
 `--smoke-test` opens the main menu, motion-delay submenu and Updates submenu,
-verifies visible row geometry, and checks all setup states and the drag helper
+verifies visible row geometry, update labels and the version row, and checks
+all setup states and the drag helper
 in light and dark appearances. It exits without requesting permission, starting monitoring, changing
 brightness or writing runtime preferences.
 `--preview-menu` opens the menu for manual visual inspection without monitoring.

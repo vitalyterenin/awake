@@ -387,6 +387,35 @@ private final class Runtime {
     #expect(env.preventingIdleSleep && !runtime.controller.moving)
 }
 
+@Test @MainActor func turningOffDimmingRetriesRestorationWhileCursorKeepsMoving() {
+    let runtime = Runtime(dimming: true)
+    defer { runtime.close() }
+    let env = runtime.environment
+    runtime.finishDimming()
+    #expect(runtime.brightness.displays["internal"] == IdleDimming.minimumLevel)
+
+    runtime.brightness.failing = ["internal"]
+    runtime.controller.setDimWhileIdle(false)
+    env.brightness(at: 165.5)
+    #expect(runtime.brightness.displays["internal"] == IdleDimming.minimumLevel)
+    #expect(runtime.journal == ["internal": 0.8125])
+
+    runtime.brightness.failing = []
+    env.tick(at: 165.75)
+    #expect(env.brightnessFrame == nil)
+    env.tick(at: 166)
+    env.brightness(at: 166.25)
+    #expect((runtime.brightness.displays["internal"] ?? 0) > IdleDimming.minimumLevel)
+    #expect(runtime.journal == ["internal": 0.8125])
+    env.brightness(at: 166.5)
+    #expect(runtime.brightness.displays["internal"] == 0.8125)
+    #expect(runtime.journal.isEmpty)
+
+    env.motionFrame?()
+    #expect(runtime.controller.moving && runtime.controller.message == "Moving cursor")
+    #expect(env.posted.count == 1)
+}
+
 @Test @MainActor func missingSnapshotStopsTheControllerAndLaterReadRestartsCountdown() {
     let runtime = Runtime(dimming: true)
     defer { runtime.close() }

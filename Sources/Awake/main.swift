@@ -85,12 +85,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateItem.isEnabled = true
         let updateMenu = NSMenu()
         updateMenu.autoenablesItems = false
+        updateMenu.delegate = self
         updateItem.submenu = updateMenu
         checkUpdates = item("Check for Updates…", #selector(checkForUpdates))
-        automaticChecks = item("Check automatically", #selector(toggleAutomaticChecks))
-        automaticInstalls = item("Install automatically", #selector(toggleAutomaticInstalls))
+        automaticChecks = item("Automatically Check for Updates", #selector(toggleAutomaticChecks))
+        automaticInstalls = item("Automatically Install Updates", #selector(toggleAutomaticInstalls))
         [checkUpdates, automaticChecks, automaticInstalls].forEach { updateMenu.addItem($0!) }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "development"
+        let versionItem = NSMenuItem(title: "Version \(version)", action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        updateMenu.addItem(versionItem)
         row("About Awake \(version)", #selector(about))
         let quit = row("Quit Awake", #selector(quitApp))
         quit.keyEquivalent = "q"
@@ -99,7 +103,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshMenu()
         if CommandLine.arguments.contains("--smoke-test") {
             guard menu.items.last?.title == "Quit Awake", menu.items.count >= 10,
-                  statusItem.button?.image != nil else { exit(1) }
+                  statusItem.button?.image != nil,
+                  updateMenu.items.map(\.title) == [
+                      "Check for Updates…", "Automatically Check for Updates",
+                      "Automatically Install Updates", "Version \(version)"
+                  ],
+                  checkUpdates.action == #selector(checkForUpdates),
+                  versionItem.action == nil, !versionItem.isEnabled else { exit(1) }
             DispatchQueue.main.async { self.verifyVisibleMenus() }
             return
         }
@@ -172,7 +182,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         checkUpdates.isEnabled = updates.canCheck
         automaticChecks.isEnabled = updates.isConfigured
-        automaticInstalls.isEnabled = updates.isConfigured
+        automaticInstalls.isEnabled = updates.isConfigured && updates.automaticallyChecks
         automaticChecks.state = updates.automaticallyChecks ? .on : .off
         automaticInstalls.state = updates.automaticallyInstalls ? .on : .off
     }

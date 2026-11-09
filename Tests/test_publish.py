@@ -46,7 +46,9 @@ class Clock:
         self.now = 0
         self.sleeps = []
 
-    def __call__(self): return self.now
+    def monotonic(self): return self.now
+
+    __call__ = monotonic
 
     def sleep(self, seconds):
         self.sleeps.append(seconds)
@@ -91,6 +93,73 @@ class PublishTests(unittest.TestCase):
         self.assertEqual((self.root / 'pages/appcast.xml').read_bytes(), self.feed)
         self.assertIn(('upload', 42, publish.ARCHIVE_NAME), self.client.calls)
         self.assertEqual(self.client.mutations[-1][2], {'draft': False, 'make_latest': 'true'})
+
+    def test_publish_retries_stale_archive_and_http_503_before_staging_pages(self):
+        clock = Clock()
+        responses = iter([b'previous release', HTTPError('url', 503, 'unavailable', {}, None),
+                          self.archive])
+        pages = self.root / 'pages'
+
+        def fetch(url):
+            if url == self.data['feedURL']:
+                return self.old
+            self.assertEqual(url, self.data['downloadURL'])
+            self.assertFalse(pages.exists())
+            self.assertEqual([call[:2] for call in self.client.mutations],
+                             [('/releases', 'POST'), ('upload', 42), ('/releases/42', 'PATCH')])
+            response = next(responses)
+            if isinstance(response, HTTPError):
+                raise response
+            return response
+
+        with patch.object(publish, 'time', clock):
+            publish.publish(self.root, self.client, fetch)
+        self.assertEqual(clock.sleeps, [5, 5])
+        self.assertEqual((pages / 'appcast.xml').read_bytes(), self.feed)
+
+    def test_publish_exhausts_read_budget_without_staging_pages(self):
+        clock = Clock()
+        archive_reads = []
+
+        def fetch(url):
+            if url == self.data['feedURL']:
+                return self.old
+            archive_reads.append(clock.now)
+            return b'previous release'
+
+        with patch.object(publish, 'time', clock), self.assertRaisesRegex(ValueError, 'did not converge'):
+            publish.publish(self.root, self.client, fetch)
+        self.assertEqual(archive_reads, [0, 5, 10, 15, 20, 25])
+        self.assertEqual(clock.sleeps, [5] * 5)
+        self.assertFalse((self.root / 'pages').exists())
+
+    def test_publish_rejects_late_matching_archive_without_staging_pages(self):
+        clock = Clock()
+
+        def fetch(url):
+            if url == self.data['feedURL']:
+                return self.old
+            clock.now += 31
+            return self.archive
+
+        with patch.object(publish, 'time', clock), self.assertRaisesRegex(ValueError, 'did not converge'):
+            publish.publish(self.root, self.client, fetch)
+        self.assertFalse(clock.sleeps)
+        self.assertFalse((self.root / 'pages').exists())
+
+    def test_publish_does_not_retry_permanent_download_failure(self):
+        clock = Clock()
+
+        def fetch(url):
+            if url == self.data['feedURL']:
+                return self.old
+            raise HTTPError(url, 403, 'forbidden', {}, None)
+
+        with patch.object(publish, 'time', clock), self.assertRaises(HTTPError) as error:
+            publish.publish(self.root, self.client, fetch)
+        self.assertEqual(error.exception.code, 403)
+        self.assertFalse(clock.sleeps)
+        self.assertFalse((self.root / 'pages').exists())
 
     def test_corrupt_artifact_cannot_mutate_github(self):
         (self.root / publish.ARCHIVE_NAME).write_bytes(b'changed')
