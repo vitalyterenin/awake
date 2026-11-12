@@ -8,8 +8,8 @@ Product usage is in the
 ## Product boundary
 
 Awake is an Apple Silicon macOS 13+ menu bar application. It prevents idle sleep
-while its runtime gates permit operation, then moves the cursor after one or five
-minutes of inactivity. Native display dimming and operation on battery are
+while its runtime gates permit operation, optionally moving the cursor after
+one or five minutes of inactivity. Native display dimming and operation on battery are
 independent opt-ins. It does not implement login startup, click/type automation,
 input recording, telemetry, or a replacement for system sleep and locking policy.
 
@@ -66,10 +66,14 @@ time. No background task queue or database coordinates runtime state.
    marker, not key codes or characters. Real events reset the countdown and stop
    motion. A heartbeat also checks HID key-event ages for Secure Input; this
    fallback has heartbeat latency rather than event-tap latency.
-6. Once the delay expires, the controller requires no pressed mouse button and a
-   display under the current pointer. `IdleMotion.begin()` captures pointer,
+6. Once the delay expires, the controller requires no pressed mouse button.
+   With cursor motion enabled (the default), it also requires a display under the
+   current pointer. `IdleMotion.begin()` captures pointer,
    bounds and start time. Motion uses a 12-point radius, four-second period and
-   0.75-second smooth entrance into an in-bounds circle.
+   0.75-second smooth entrance into an in-bounds circle. With motion disabled,
+   idle state starts without reading the pointer or starting an animation clock.
+   Optional dimming follows idle state independently of cursor motion; the sleep
+   assertion and activity-detection gates stay the same in both modes.
 7. Each animation frame checks cached runtime gates, the live event-tap state and
    whether the pointer is still within one point of the last posted position.
    It posts a tagged `.mouseMoved` event, or resets activity on failure. Own tagged
@@ -77,8 +81,10 @@ time. No background task queue or database coordinates runtime state.
    outside the frame path.
 
 Changing delay persists the choice and starts a fresh countdown. Changing enabled
-or battery policy resets activity. Session suspend stops movement, attempts an
-immediate brightness restore and releases the assertion. Resume resets the
+or battery policy resets activity. Switching cursor motion persists the choice,
+stops current idle effects, restores brightness and starts a fresh countdown.
+Session suspend stops movement, attempts an immediate brightness restore and
+releases the assertion. Resume resets the
 countdown. Session usability combines workspace notifications, console-session
 membership and the optional WindowServer lock flag; the heartbeat rechecks it.
 
@@ -130,6 +136,7 @@ outcome changes without refreshing the menu on every brightness frame.
 | --- | --- |
 | `keepAwake` | `true`; enabled preference, independent of current permission or power. |
 | `motionDelayMinutes` | `5`; only `1` and `5` accepted, invalid values fall back to five. |
+| `moveCursorWhileIdle` | `true`; opt out of cursor movement while keeping the sleep assertion and optional idle dimming. |
 | `dimWhileIdle` | `false`; native dimming opt-in. |
 | `allowOnBattery` | `false`; battery opt-in. Missing snapshots, missing source types and unknown sources pause. |
 | `pendingBrightnessRestore` | Display UUID to original normalized brightness; retained across launches until successful recovery. |

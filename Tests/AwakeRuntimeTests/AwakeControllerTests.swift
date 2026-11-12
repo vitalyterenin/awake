@@ -88,10 +88,11 @@ private final class Runtime {
     let defaults: UserDefaults
     let controller: AwakeController
 
-    init(dimming: Bool = false, saved: [String: Float] = [:]) {
+    init(dimming: Bool = false, saved: [String: Float] = [:], cursorMotion: Bool? = nil) {
         defaults = UserDefaults(suiteName: suite)!
         defaults.set(1, forKey: "motionDelayMinutes")
         defaults.set(dimming, forKey: "dimWhileIdle")
+        if let cursorMotion { defaults.set(cursorMotion, forKey: "moveCursorWhileIdle") }
         if !saved.isEmpty { defaults.set(saved, forKey: "pendingBrightnessRestore") }
         controller = AwakeController(environment: environment, brightness: brightness, defaults: defaults)
     }
@@ -168,6 +169,72 @@ private final class Runtime {
     #expect(env.preventingIdleSleep && runtime.controller.moving)
     #expect(runtime.defaults.bool(forKey: "keepAwake"))
     #expect(runtime.defaults.integer(forKey: "motionDelayMinutes") == 1)
+}
+
+@Test @MainActor func stationaryModeKeepsSleepAssertionWithoutPointerOrMotionAndPersists() {
+    let runtime = Runtime()
+    defer { runtime.close() }
+    let env = runtime.environment
+    #expect(runtime.controller.moveCursorWhileIdle)
+    runtime.controller.start()
+    runtime.controller.setMoveCursorWhileIdle(false)
+    env.pointer = nil
+    for time in [101.0, 160.0, 800.0] {
+        env.tick(at: time)
+        #expect(env.preventingIdleSleep && !runtime.controller.moving)
+        #expect(env.motionFrame == nil && env.posted.isEmpty)
+        #expect(runtime.controller.message == "Keeping Mac awake")
+    }
+    let restored = AwakeController(environment: FakeEnvironment(), brightness: FakeBrightness(), defaults: runtime.defaults)
+    #expect(!restored.moveCursorWhileIdle)
+    runtime.controller.setEnabled(false)
+    #expect(!env.preventingIdleSleep)
+}
+
+@Test @MainActor func switchingModesRestoresBrightnessAndPreservesDimmingWithoutMotion() {
+    let runtime = Runtime(dimming: true)
+    defer { runtime.close() }
+    let env = runtime.environment
+    runtime.startMoving()
+    env.brightness(at: 162)
+    runtime.controller.setMoveCursorWhileIdle(false)
+    #expect(!runtime.controller.moving && env.motionFrame == nil && env.preventingIdleSleep)
+    #expect(runtime.controller.message == "Dimming in 1:00")
+    env.brightness(at: 162.5)
+    #expect(runtime.journal.isEmpty && runtime.brightness.displays["internal"] == 0.8125)
+    env.tick(at: 222)
+    env.brightness(at: 227)
+    #expect(runtime.controller.message == "Display dimmed")
+    #expect(!runtime.controller.moving && env.motionFrame == nil && env.posted.isEmpty)
+    #expect(env.preventingIdleSleep && runtime.journal == ["internal": 0.8125])
+    env.activity?(0)
+    env.brightness(at: 227.5)
+    #expect(runtime.journal.isEmpty && runtime.brightness.displays["internal"] == 0.8125)
+    runtime.controller.setMoveCursorWhileIdle(true)
+    #expect(!runtime.controller.moving && env.preventingIdleSleep)
+    env.tick(at: 287.5)
+    #expect(runtime.controller.moving && env.motionFrame != nil)
+    env.now = 289.5
+    env.motionFrame?()
+    #expect(abs(env.pointer!.x - 424) < 0.000001)
+}
+
+@Test @MainActor func stationaryDimmingFailureAndSuspensionPreserveRecovery() {
+    let runtime = Runtime(dimming: true, cursorMotion: false)
+    defer { runtime.close() }
+    let env = runtime.environment
+    runtime.brightness.failing = ["internal"]
+    runtime.controller.start()
+    env.tick(at: 160)
+    env.brightness(at: 161)
+    #expect(runtime.controller.message == "Keeping awake · brightness unavailable")
+    #expect(!runtime.controller.moving && env.preventingIdleSleep)
+    #expect(runtime.journal == ["internal": 0.8125])
+    runtime.brightness.failing = []
+    env.suspension?(true)
+    #expect(runtime.journal.isEmpty && !env.preventingIdleSleep)
+    env.suspension?(false)
+    #expect(env.preventingIdleSleep && runtime.controller.message == "Dimming in 1:00")
 }
 
 @Test @MainActor func batteryAndUnknownPowerPauseWithBrightnessRecoveryAndFreshCountdowns() {

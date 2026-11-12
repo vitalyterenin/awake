@@ -2,7 +2,8 @@
 
 Awake keeps your Mac awake from the macOS menu bar. After one or five minutes
 without activity, the cursor moves in a small circle. Move the mouse, scroll,
-click or type to stop the motion and restart the countdown.
+click or type to stop the motion and restart the countdown. Turn off **Move cursor
+while idle** to keep the Mac awake with a stationary pointer instead.
 
 **Apple Silicon only · macOS 13 or later**
 
@@ -40,8 +41,9 @@ Open the coffee cup in the menu bar:
 | Control | Behavior and default |
 | --- | --- |
 | **Keep Mac awake** | On/off switch, on by default. Requires cursor control and an allowed power source. |
-| **Start cursor motion after** | Choose **1 minute** or **5 minutes**; default 5. Changing it starts a fresh countdown. |
-| **Dim display while idle** | Off by default. Dim supported displays when cursor motion starts. |
+| **Move cursor while idle** | On by default. Turn off to keep the Mac awake without moving the cursor; dimming remains available. |
+| **Start cursor motion after** / **Start dimming after** | Choose **1 minute** or **5 minutes**; default 5. Changing it starts a fresh countdown. |
+| **Dim display while idle** | Off by default. Dim supported displays after the idle delay, with or without cursor motion. |
 | **Allow on battery power** | Off by default. Enable to keep Awake running on battery. |
 
 These choices persist between launches. The menu shows whether Awake is keeping
@@ -52,7 +54,10 @@ styling.
 Cursor motion follows the display refresh rate on macOS 14+, with a 60 Hz fallback
 on macOS 13. The circle has a fixed 12-point radius and takes four seconds per turn.
 At display edges the cursor eases into a full circle within that display. Awake
-does not click, drag or type.
+does not click, drag or type. The sleep assertion stays active with cursor motion
+turned off. Activity detection and its Accessibility permission are required in
+both modes. The delay control applies to dimming when motion is off and is disabled
+when both motion and dimming are off.
 
 With **Dim display while idle**, the native system brightness slider lowers to
 1/16 (about 6%) over five seconds. Input restores the captured level over half a
@@ -64,8 +69,8 @@ Normal quit and session suspension restore immediately. If forced termination
 interrupts dimming, the next launch recovers saved levels. A disconnected display
 keeps its recovery value until it can be restored.
 If brightness changes fail, the menu shows that brightness is unavailable or that
-some displays are unavailable. Cursor motion continues, and recovery values remain
-saved until brightness restoration succeeds.
+some displays are unavailable. Sleep prevention and any enabled cursor motion
+continue, and recovery values remain saved until brightness restoration succeeds.
 
 With battery use disabled, Awake pauses on battery, restores brightness and allows
 normal idle sleep. Connecting power starts a fresh countdown. Unknown power sources
