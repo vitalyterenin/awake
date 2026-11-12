@@ -12,6 +12,8 @@ package final class AwakeController {
     package private(set) var enabled: Bool
     package private(set) var message = "Starting…"
     package private(set) var moving = false
+    package private(set) var moveCursorWhileIdle: Bool
+    private var idleActive = false
     package private(set) var dimWhileIdle: Bool
     package private(set) var allowOnBattery: Bool
     private let environment: any AwakeEnvironment
@@ -35,8 +37,10 @@ package final class AwakeController {
         self.environment = environment
         self.defaults = defaults
         defaults.register(defaults: ["keepAwake": true, "motionDelayMinutes": 5,
-                                     "dimWhileIdle": false, "allowOnBattery": false])
+                                     "dimWhileIdle": false, "allowOnBattery": false,
+                                     "moveCursorWhileIdle": true])
         enabled = defaults.bool(forKey: "keepAwake")
+        moveCursorWhileIdle = defaults.bool(forKey: "moveCursorWhileIdle")
         dimWhileIdle = defaults.bool(forKey: "dimWhileIdle")
         allowOnBattery = defaults.bool(forKey: "allowOnBattery")
         let saved = (defaults.dictionary(forKey: "pendingBrightnessRestore") ?? [:])
@@ -58,6 +62,7 @@ package final class AwakeController {
     package var motionDelay: MotionDelay { motion.delay }
     package var diagnostics: [String: Any] {
         ["message": message, "enabled": enabled, "moving": moving,
+         "moveCursorWhileIdle": moveCursorWhileIdle, "idleActive": idleActive,
          "cursorAccess": !needsPermission, "delayMinutes": motion.delay.rawValue,
          "inputMonitoringFailed": inputMonitoringFailed,
          "dimWhileIdle": dimWhileIdle, "allowOnBattery": allowOnBattery,
@@ -84,6 +89,13 @@ package final class AwakeController {
         defaults.set(delay.rawValue, forKey: "motionDelayMinutes")
         motion.setDelay(delay, at: environment.now)
         if started { stopMotion() }
+        tick()
+    }
+
+    package func setMoveCursorWhileIdle(_ value: Bool) {
+        moveCursorWhileIdle = value
+        defaults.set(value, forKey: "moveCursorWhileIdle")
+        input(at: environment.now)
         tick()
     }
 
@@ -195,26 +207,36 @@ package final class AwakeController {
         if keyIdle.isFinite && now - keyIdle > motion.lastActivity + 0.01 {
             input(at: now - keyIdle)
         }
-        if motion.isReady(at: now), !moving, !environment.buttonsAreDown,
-           let point = environment.pointer, let display = environment.display(at: point) {
-            motion.begin(at: now, pointer: point, display: display.bounds)
-            lastPostedPoint = point
-            moving = true
-            environment.startMotion(on: display.id) { [weak self] in self?.animate() }
+        if motion.isReady(at: now), !idleActive, !environment.buttonsAreDown {
+            if !moveCursorWhileIdle {
+                idleActive = true
+            } else if let point = environment.pointer, let display = environment.display(at: point) {
+                motion.begin(at: now, pointer: point, display: display.bounds)
+                lastPostedPoint = point
+                moving = true
+                idleActive = true
+                environment.startMotion(on: display.id) { [weak self] in self?.animate() }
+            }
         }
-        if moving {
+        if idleActive {
             if dimWhileIdle {
                 dimming.fadeDown(at: now)
                 updateBrightnessClock()
                 updateDimmingMessage()
             } else {
                 restoreBrightness()
-                message = "Moving cursor"
+                message = moving ? "Moving cursor" : "Keeping Mac awake"
             }
         } else {
             restoreBrightness()
             let remaining = max(0, Int(ceil(motion.delay.seconds - (now - motion.lastActivity))))
-            message = String(format: "Motion in %d:%02d", remaining / 60, remaining % 60)
+            if moveCursorWhileIdle {
+                message = String(format: "Motion in %d:%02d", remaining / 60, remaining % 60)
+            } else if dimWhileIdle {
+                message = String(format: "Dimming in %d:%02d", remaining / 60, remaining % 60)
+            } else {
+                message = "Keeping Mac awake"
+            }
         }
     }
 
@@ -233,11 +255,12 @@ package final class AwakeController {
     }
 
     private func stopMotion() {
-        let wasMoving = moving
+        let wasIdle = idleActive
         environment.stopMotion()
         moving = false
+        idleActive = false
         lastPostedPoint = nil
-        restoreBrightness(force: wasMoving)
+        restoreBrightness(force: wasIdle)
     }
 
     private func restoreBrightness(force: Bool = false, immediately: Bool = false) {
@@ -254,8 +277,8 @@ package final class AwakeController {
         switch dimming.status {
         case .dimming: message = "Dimming display"
         case .dimmed: message = "Display dimmed"
-        case .unavailable: message = "Cursor moving · brightness unavailable"
-        case .partiallyUnavailable: message = "Cursor moving · some displays unavailable"
+        case .unavailable: message = moving ? "Cursor moving · brightness unavailable" : "Keeping awake · brightness unavailable"
+        case .partiallyUnavailable: message = moving ? "Cursor moving · some displays unavailable" : "Keeping awake · some displays unavailable"
         }
     }
 
@@ -265,7 +288,7 @@ package final class AwakeController {
             guard let self, self.started else { return }
             self.dimming.advance(to: self.environment.now)
             self.updateBrightnessClock()
-            if self.moving && self.dimWhileIdle {
+            if self.idleActive && self.dimWhileIdle {
                 let previous = self.message
                 self.updateDimmingMessage()
                 if self.message != previous { self.didChange?() }

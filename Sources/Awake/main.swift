@@ -45,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var automaticInstalls: NSMenuItem!
     private var delayRow: NSMenuItem!
     private var delayChoices: [NSMenuItem] = []
+    private var motionRow: NSMenuItem!
     private var dimRow: NSMenuItem!
     private var batteryRow: NSMenuItem!
     private var setup: PermissionSetupWindow?
@@ -67,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         permissionRow = row("Permissions…", #selector(showSetup))
         menu.addItem(.separator())
         toggle = row("Keep Mac awake", #selector(toggleAwake))
+        motionRow = row("Move cursor while idle", #selector(toggleCursorMotion))
         delayRow = row("Start cursor motion after")
         delayRow.isEnabled = true
         let delayMenu = NSMenu()
@@ -109,6 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                       "Automatically Install Updates", "Version \(version)"
                   ],
                   checkUpdates.action == #selector(checkForUpdates),
+                  motionRow.title == "Move cursor while idle",
+                  motionRow.action == #selector(toggleCursorMotion),
                   versionItem.action == nil, !versionItem.isEnabled else { exit(1) }
             DispatchQueue.main.async { self.verifyVisibleMenus() }
             return
@@ -156,7 +160,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         toggle.state = awake.enabled ? .on : .off
         dimRow.state = awake.dimWhileIdle ? .on : .off
         batteryRow.state = awake.allowOnBattery ? .on : .off
-        delayRow.title = "Start cursor motion after · \(awake.motionDelay.rawValue) min"
+        motionRow.state = awake.moveCursorWhileIdle ? .on : .off
+        let delayTitle = awake.moveCursorWhileIdle ? "Start cursor motion after" : "Start dimming after"
+        delayRow.title = "\(delayTitle) · \(awake.motionDelay.rawValue) min"
+        delayRow.isEnabled = awake.moveCursorWhileIdle || awake.dimWhileIdle
         for choice in delayChoices { choice.state = choice.tag == awake.motionDelay.rawValue ? .on : .off }
         let controlState = previewControlState ?? awake.cursorControlState
         let blocked = controlState != .ready
@@ -195,7 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Exercise the longest runtime message without starting hardware effects.
         let previousStatus = statusRow.title
         menu.delegate = nil
-        statusRow.title = "Cursor moving · some displays unavailable"
+        statusRow.title = "Keeping awake · some displays unavailable"
         defer { statusRow.title = previousStatus; menu.delegate = self }
         for visible in [menu, delayRow.submenu!, checkUpdates.menu!] {
             let probe = MenuProbe(menu: visible)
@@ -259,6 +266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if awake.enabled && awake.cursorControlState != .ready { showSetup() }
     }
     @objc private func toggleDimming() { awake.setDimWhileIdle(!awake.dimWhileIdle) }
+    @objc private func toggleCursorMotion() { awake.setMoveCursorWhileIdle(!awake.moveCursorWhileIdle) }
     @objc private func toggleBattery() { awake.setAllowOnBattery(!awake.allowOnBattery) }
     @objc private func selectDelay(_ sender: NSMenuItem) {
         guard let delay = MotionDelay(rawValue: sender.tag) else { return }
