@@ -36,6 +36,10 @@ no additional permission is requested.
 
 ## Use
 
+Awake establishes its own macOS launch identity before creating the menu, including
+when started from a terminal or an automation app. Its menu bar visibility and
+Accessibility access belong to Awake independently of the launcher.
+
 Open the coffee cup in the menu bar:
 
 | Control | Behavior and default |

@@ -36,12 +36,13 @@ library; packaging also invokes macOS tools and pinned Sparkle command-line tool
 | `PermissionSetupWindow`, `PermissionDragPanel` | Native setup/recovery windows and file drag helper that accompanies System Settings. |
 | `UpdateController` | Sparkle initialization, update checks and saved automatic-update options. |
 | `RuntimeStatus` | Read-only request/reply diagnostics over distributed notifications. |
+| `AwakeRuntime/LaunchIdentity` | Establishes the app's own process responsibility before UI and permission checks. |
 
 `AwakeEnvironment` is an internal protocol, not a public plugin API. Its production
 adapter owns the run-loop resources; tests supply a manual clock, callbacks, power,
 permission and session inputs, simulated taps/assertions and event posting. The
 controller accepts injected brightness access and an isolated UserDefaults suite.
-Only the controller's existing app-facing surface is package-visible across targets.
+The app-facing controller, state and launch-identity APIs use package-scoped access.
 
 Runtime classes and brightness access are main-actor isolated. Event-tap and
 power-source callbacks enter through the main run loop; notification callbacks
@@ -50,8 +51,9 @@ time. No background task queue or database coordinates runtime state.
 
 ## Startup, countdown and motion
 
-1. `--status` and `--diagnostics` exit before constructing the normal app delegate.
-   Normal startup creates the menu and controllers. Preview/smoke branches return
+1. `--status` exits before constructing the normal app delegate. Other modes first
+   establish the process's own launch identity, then `--diagnostics` exits before
+   constructing the delegate. Normal startup creates the menu and controllers. Preview/smoke branches return
    before starting Sparkle, monitoring, runtime recovery or the status responder.
 2. `AwakeController.start()` first attempts immediate recovery of saved brightness,
    subscribes to power/session/display notifications, starts a one-second heartbeat
@@ -149,10 +151,38 @@ installation is unavailable while automatic checks are off, and Sparkle retains
 the saved choice. Manual checks depend on updater readiness. The read-only
 version row displays the running bundle's marketing version.
 
+## Launch identity
+
+Before creating an `NSApplication`, `LaunchIdentity` checks the current responsible
+PID. A launcher such as a terminal or automation app can otherwise acquire Awake's
+menu item in macOS Tahoe's Control Center allowlist, hiding it whenever the
+launcher is hidden even when Awake itself is allowed.
+
+An inherited identity triggers one `posix_spawn` with `POSIX_SPAWN_SETEXEC` and
+`responsibility_spawnattrs_setdisclaim`. This replaces the current process with
+the same executable, PID, arguments, environment, working directory and standard
+streams. The second entry verifies its own responsibility before registering UI.
+An environment marker bounds retries; it never bypasses verification and is
+removed before normal startup. Missing APIs, system errors or persistent inherited
+responsibility stop startup with an error on stderr rather than registering the
+menu under the launcher. Independent launches do not re-exec.
+
+These private libSystem symbols are dynamically resolved, following the native
+spawn mechanism used by [LLVM LLDB](https://github.com/llvm/llvm-project/blob/main/lldb/source/Host/macosx/objcxx/PosixSpawnResponsible.h)
+and [Chromium](https://chromium.googlesource.com/chromium/src/+/lkgr/base/process/launch_mac.cc).
+No new dependency, persistent helper, login item or automatic Control Center
+preferences mutation is needed. An external launchd wrapper was considered;
+placing the guard in the entry point also covers direct executable launches.
+The macOS subprocess regression compiles the production implementation and checks
+identity, PID and launch-contract preservation plus the bounded retry failure.
+
+## Runtime diagnostics
+
 `--status` sends a UUID-tagged distributed notification and waits up to two seconds
 for JSON from an already running app. It reports that process's permission,
 power policy, sleep assertion, motion frame count, recovery count and setup-window
-state. It does not start the runtime. The protocol does not select a particular
+state, including `processID` and `responsibleProcessID`. It does not start the
+runtime. The protocol does not select a particular
 instance if multiple copies are running. `--diagnostics` reports permission of
 the diagnostic process; it is not proof that an installed app has permission.
 
