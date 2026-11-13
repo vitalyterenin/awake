@@ -132,7 +132,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         runtimeStatus.start { [weak self] in
             guard let self else { return [:] }
             return self.awake.diagnostics.merging(self.permissionDrag.diagnostics) { _, new in new }.merging(["setupVisible": self.setup?.isVisible == true,
-                "permissionDragVisible": self.permissionDrag.isVisible]) { _, new in new }
+                "permissionDragVisible": self.permissionDrag.isVisible,
+                "processID": getpid(), "responsibleProcessID": LaunchIdentity.responsiblePID ?? -1]) { _, new in new }
         }
         let firstLaunch = !UserDefaults.standard.bool(forKey: "didWelcome")
         if firstLaunch || awake.cursorControlState != .ready {
@@ -284,6 +285,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 }
 
 if CommandLine.arguments.contains("--status") { exit(RuntimeStatus.query() ? 0 : 1) }
+
+do {
+    try LaunchIdentity.prepare()
+} catch {
+    fputs("Awake could not start independently: \(error)\n", stderr)
+    exit(1)
+}
 
 if CommandLine.arguments.contains("--diagnostics") {
     print("Awake · arm64 · macOS 13+ · 1- or 5-minute idle delay (default 5) · 12-point radius · 4-second circle")

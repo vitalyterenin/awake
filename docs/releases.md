@@ -210,7 +210,13 @@ brightness or writing runtime preferences.
 `--preview-menu` opens the menu for manual visual inspection without monitoring.
 `--status` queries the already running app over a read-only local notification
 exchange, reporting its own permission state, power policy, dimming recovery count
-and animation frame count. It does not start Awake or change settings. Use this
+and animation frame count. `processID` must equal `responsibleProcessID` in the
+running app. Other modes establish the app's own launch responsibility before UI
+or permission checks, so a launch from an automation app cannot claim its menu item.
+The subprocess regression in `Tests/test_launch_identity.py` verifies that process
+replacement preserves PID, arguments, environment, working directory and standard
+streams, with a bounded failure when identity is still inherited.
+`--status` does not start Awake or change settings. Use this
 for live checks instead of inferring app permission from the diagnostic CLI process.
 Never use live cursor movement tests without the user
 granting Accessibility to the installed app. Secure Input is handled using only
@@ -221,8 +227,8 @@ and display notifications. The macOS sleep/lock policy remains in control.
 For local ad hoc development builds, finish rebuilding before granting access:
 their designated requirement remains bound to a changing code hash. Use the
 persistent keychain for local permission-continuity tests. Query `--status` in the
-running app's own context; a diagnostic process started by a trusted development
-tool can inherit that tool's access and report a misleading result. If an old
+running app's own context; `--diagnostics` establishes a separate process identity
+but still cannot prove permission for a different installed build. If an old
 ad hoc grant remains enabled-looking but unusable, remove only Awake's entry and
 add the exact installed bundle once. Never reset unrelated application grants.
 
